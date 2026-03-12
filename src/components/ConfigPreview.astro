@@ -2,12 +2,12 @@
 ---
 
 <section class="section" id="config-preview-section" hidden>
-  <h2 class="preview__title text-secondary">Live Config Preview</h2>
+  <h2 class="preview__title text-secondary">Preview da Configuração</h2>
   <div class="preview__tabs" id="preview-tabs"></div>
   <div class="preview__content" id="preview-content">
     <div class="preview__actions">
-      <button class="btn btn--sm" id="copy-current-btn">[COPY]</button>
-      <button class="btn btn--sm" id="download-current-btn">[DOWNLOAD]</button>
+      <button class="btn btn--sm" id="copy-current-btn">[COPIAR]</button>
+      <button class="btn btn--sm" id="download-current-btn">[BAIXAR]</button>
     </div>
     <pre class="preview__code" id="preview-code"></pre>
   </div>
@@ -185,8 +185,8 @@
 
     copyBtn.onclick = async () => {
       const ok = await copyToClipboard(content);
-      copyBtn.textContent = ok ? '[COPIED!]' : '[FAILED]';
-      setTimeout(() => (copyBtn.textContent = '[COPY]'), 1500);
+      copyBtn.textContent = ok ? '[COPIADO!]' : '[ERRO]';
+      setTimeout(() => (copyBtn.textContent = '[COPIAR]'), 1500);
     };
 
     dlBtn.onclick = () => downloadText(content, filename);

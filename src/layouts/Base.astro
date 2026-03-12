@@ -1,21 +1,62 @@
 ---
 interface Props {
   title: string;
+  description: string;
 }
-const { title } = Astro.props;
+const { title, description } = Astro.props;
+const canonicalUrl = Astro.url.href;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:site_name" content="WireGuard Config Generator" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+
+    <!-- Extras -->
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Otávio Miranda" />
     <meta
-      name="description"
-      content="Generate WireGuard configuration files in your browser. No server. No tracking. Just math."
+      name="keywords"
+      content="wireguard, configuração, gerador, vpn, config, mesh, hub-spoke, chaves, X25519, web crypto"
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title}</title>
+
+    <!-- Structured Data -->
+    <script
+      type="application/ld+json"
+      set:html={JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebApplication',
+        name: 'WireGuard Config Generator',
+        description,
+        url: canonicalUrl,
+        applicationCategory: 'NetworkingApplication',
+        operatingSystem: 'Any',
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'BRL' },
+        author: {
+          '@type': 'Person',
+          name: 'Otávio Miranda',
+          url: 'https://www.otaviomiranda.com.br',
+        },
+      })}
+    />
   </head>
   <body>
     <slot />

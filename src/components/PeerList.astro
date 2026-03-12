@@ -3,12 +3,12 @@
 
 <section class="section" id="peer-list-section">
   <div class="peers__header">
-    <h2 class="peers__title text-secondary">Nodes</h2>
-    <button class="btn btn--accent" id="add-peer-btn">[+ ADD NODE]</button>
+    <h2 class="peers__title text-secondary">Nós</h2>
+    <button class="btn btn--accent" id="add-peer-btn">[+ ADICIONAR NÓ]</button>
   </div>
   <div class="peers__grid" id="peers-container"></div>
   <p class="peers__empty text-muted" id="peers-empty">
-    No nodes yet. Click [+ ADD NODE] to get started.
+    Nenhum nó ainda. Clique em [+ ADICIONAR NÓ] para começar.
   </p>
 </section>
 
@@ -55,10 +55,10 @@
 
   addBtn.addEventListener('click', async () => {
     addBtn.setAttribute('disabled', '');
-    addBtn.textContent = '[GENERATING...]';
+    addBtn.textContent = '[GERANDO...]';
     await addPeer();
     addBtn.removeAttribute('disabled');
-    addBtn.textContent = '[+ ADD NODE]';
+    addBtn.textContent = '[+ ADICIONAR NÓ]';
   });
 
   function createPeerCard(peer: Peer): HTMLElement {
@@ -79,23 +79,23 @@
       </div>
       <div class="peer-card__fields">
         <div class="peer-card__field">
-          <label>Name</label>
+          <label>Nome</label>
           <input type="text" data-field="name" value="${escapeAttr(peer.name)}" placeholder="hostname" />
         </div>
         <div class="peer-card__field">
-          <label>Label</label>
-          <input type="text" data-field="label" value="${escapeAttr(peer.label)}" placeholder="Description" />
+          <label>Rótulo</label>
+          <input type="text" data-field="label" value="${escapeAttr(peer.label)}" placeholder="Descrição" />
         </div>
         <div class="peer-card__field">
-          <label>LAN IP</label>
+          <label>IP Local (LAN)</label>
           <input type="text" data-field="lanIp" value="${escapeAttr(peer.lanIp)}" placeholder="192.168.0.100" />
         </div>
         <div class="peer-card__field">
-          <label>Public Endpoint</label>
-          <input type="text" data-field="publicEndpointIp" value="${escapeAttr(peer.publicEndpointIp)}" placeholder="(optional)" />
+          <label>Endpoint Público</label>
+          <input type="text" data-field="publicEndpointIp" value="${escapeAttr(peer.publicEndpointIp)}" placeholder="(opcional)" />
         </div>
         <div class="peer-card__field peer-card__field--short">
-          <label>WG Octet</label>
+          <label>Octeto WG</label>
           <input type="number" data-field="wgOctet" value="${peer.wgOctet}" min="1" max="254" />
         </div>
       </div>

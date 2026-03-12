@@ -2,9 +2,9 @@
 ---
 
 <section class="section action-bar" id="action-bar" hidden>
-  <button class="btn btn--accent" id="regen-keys-btn">[REGENERATE KEYS]</button>
-  <button class="btn btn--accent" id="download-all-btn">[DOWNLOAD ALL .zip]</button>
-  <button class="btn" id="copy-all-btn">[COPY ALL]</button>
+  <button class="btn btn--accent" id="regen-keys-btn">[REGERAR CHAVES]</button>
+  <button class="btn btn--accent" id="download-all-btn">[BAIXAR TUDO .zip]</button>
+  <button class="btn" id="copy-all-btn">[COPIAR TUDO]</button>
 </section>
 
 <style>
@@ -33,11 +33,11 @@
   const copyAllBtn = document.getElementById('copy-all-btn')!;
 
   regenBtn.addEventListener('click', async () => {
-    regenBtn.textContent = '[GENERATING...]';
+    regenBtn.textContent = '[GERANDO...]';
     regenBtn.setAttribute('disabled', '');
     await regenerateAllKeys();
     regenBtn.removeAttribute('disabled');
-    regenBtn.textContent = '[REGENERATE KEYS]';
+    regenBtn.textContent = '[REGERAR CHAVES]';
   });
 
   dlAllBtn.addEventListener('click', () => {
@@ -58,8 +58,8 @@
     const configs = generateAllConfigs(state.peers, state.network);
     const allText = configs.map((c) => `# --- ${c.filename} ---\n${c.content}`).join('\n\n');
     const ok = await copyToClipboard(allText);
-    copyAllBtn.textContent = ok ? '[COPIED!]' : '[FAILED]';
-    setTimeout(() => (copyAllBtn.textContent = '[COPY ALL]'), 1500);
+    copyAllBtn.textContent = ok ? '[COPIADO!]' : '[ERRO]';
+    setTimeout(() => (copyAllBtn.textContent = '[COPIAR TUDO]'), 1500);
   });
 
   subscribe((state) => {
