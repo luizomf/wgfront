@@ -1,0 +1,216 @@
+---
+---
+
+<section class="section" id="config-preview-section" hidden>
+  <h2 class="preview__title text-secondary">Live Config Preview</h2>
+  <div class="preview__tabs" id="preview-tabs"></div>
+  <div class="preview__content" id="preview-content">
+    <div class="preview__actions">
+      <button class="btn btn--sm" id="copy-current-btn">[COPY]</button>
+      <button class="btn btn--sm" id="download-current-btn">[DOWNLOAD]</button>
+    </div>
+    <pre class="preview__code" id="preview-code"></pre>
+  </div>
+</section>
+
+<style>
+  .preview__title {
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 1rem;
+  }
+
+  .preview__tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .preview__tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .preview__content {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    position: relative;
+  }
+
+  .preview__actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.375rem;
+    z-index: 1;
+  }
+
+  .preview__code {
+    padding: 1rem;
+    padding-right: 10rem;
+    font-size: 1rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    white-space: pre;
+    border-left: 3px solid var(--accent);
+    min-height: 200px;
+    color: var(--text-primary);
+  }
+</style>
+
+<style is:global>
+  .preview__tab {
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+  }
+
+  .preview__tab:hover {
+    color: var(--text-secondary);
+  }
+
+  .preview__tab--active {
+    color: var(--accent);
+    background: var(--bg-card);
+    border-color: var(--border);
+    border-bottom-color: var(--bg-card);
+  }
+
+  .syn-section { color: #c792ea; font-weight: 700; }
+  .syn-key { color: #82aaff; }
+  .syn-value { color: #c3e88d; }
+  .syn-comment { color: #546e7a; }
+  .syn-eq { color: #89ddff; }
+</style>
+
+<script>
+  import {
+    subscribe,
+    getState,
+  } from '../lib/store';
+  import {
+    generateAllConfigs,
+    generateKeySummary,
+  } from '../lib/config-generator';
+  import { copyToClipboard } from '../lib/clipboard';
+  import { downloadText } from '../lib/download';
+  import type { GeneratedConfig } from '../lib/types';
+
+  const section = document.getElementById('config-preview-section')!;
+  const tabsEl = document.getElementById('preview-tabs')!;
+  const codeEl = document.getElementById('preview-code')!;
+  const copyBtn = document.getElementById('copy-current-btn')!;
+  const dlBtn = document.getElementById('download-current-btn')!;
+
+  let currentConfigs: GeneratedConfig[] = [];
+  let keySummary = '';
+  let activeTab = 0;
+
+  function highlightConfig(text: string): string {
+    return text
+      .split('\n')
+      .map((line) => {
+        if (line.startsWith('#')) {
+          return `<span class="syn-comment">${escapeHtml(line)}</span>`;
+        }
+        if (line.startsWith('[') && line.endsWith(']')) {
+          return `<span class="syn-section">${escapeHtml(line)}</span>`;
+        }
+        const match = line.match(/^(\S+)(\s*=\s*)(.+)$/);
+        if (match) {
+          return (
+            `<span class="syn-key">${escapeHtml(match[1])}</span>` +
+            `<span class="syn-eq">${escapeHtml(match[2])}</span>` +
+            `<span class="syn-value">${escapeHtml(match[3])}</span>`
+          );
+        }
+        return escapeHtml(line);
+      })
+      .join('\n');
+  }
+
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function renderTabs(): void {
+    tabsEl.innerHTML = '';
+    const allTabs = [
+      ...currentConfigs.map((c) => c.filename),
+      'keys.txt',
+    ];
+    allTabs.forEach((name, i) => {
+      const btn = document.createElement('button');
+      btn.className =
+        'preview__tab' + (i === activeTab ? ' preview__tab--active' : '');
+      btn.textContent = name;
+      btn.addEventListener('click', () => {
+        activeTab = i;
+        renderTabs();
+        renderCode();
+      });
+      tabsEl.appendChild(btn);
+    });
+  }
+
+  function renderCode(): void {
+    let content: string;
+    let filename: string;
+
+    if (activeTab < currentConfigs.length) {
+      content = currentConfigs[activeTab].content;
+      filename = currentConfigs[activeTab].filename;
+    } else {
+      content = keySummary;
+      filename = 'keys.txt';
+    }
+
+    codeEl.innerHTML = highlightConfig(content);
+
+    copyBtn.onclick = async () => {
+      const ok = await copyToClipboard(content);
+      copyBtn.textContent = ok ? '[COPIED!]' : '[FAILED]';
+      setTimeout(() => (copyBtn.textContent = '[COPY]'), 1500);
+    };
+
+    dlBtn.onclick = () => downloadText(content, filename);
+  }
+
+  function update(): void {
+    const state = getState();
+    if (state.peers.length === 0) {
+      section.hidden = true;
+      return;
+    }
+
+    section.hidden = false;
+    currentConfigs = generateAllConfigs(state.peers, state.network);
+    keySummary = generateKeySummary(state.peers, state.network);
+
+    if (activeTab >= currentConfigs.length + 1) {
+      activeTab = 0;
+    }
+
+    renderTabs();
+    renderCode();
+  }
+
+  subscribe(update);
+  update();
+</script>

@@ -1,0 +1,89 @@
+---
+---
+
+<section class="section" id="network-settings">
+  <div class="net__prompt">
+    <span class="text-accent">$</span>
+    <span class="text-secondary">configure</span>
+  </div>
+  <div class="net__fields">
+    <div class="net__field">
+      <label for="subnet">--subnet</label>
+      <input type="text" id="subnet" value="10.100.0" placeholder="10.100.0" />
+    </div>
+    <div class="net__field">
+      <label for="port">--port</label>
+      <input type="number" id="port" value="51820" min="1" max="65535" />
+    </div>
+    <div class="net__field">
+      <label for="keepalive">--keepalive</label>
+      <input type="number" id="keepalive" value="25" min="0" max="600" />
+    </div>
+    <div class="net__field">
+      <label for="topology">--topology</label>
+      <select id="topology">
+        <option value="mesh" selected>mesh</option>
+        <option value="hub-spoke">hub-spoke</option>
+      </select>
+    </div>
+  </div>
+</section>
+
+<style>
+  .net__prompt {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .net__fields {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .net__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .net__field input {
+    width: 100%;
+  }
+</style>
+
+<script>
+  import { updateNetwork, getState } from '../lib/store';
+  import type { Topology } from '../lib/types';
+
+  const subnetInput = document.getElementById('subnet') as HTMLInputElement;
+  const portInput = document.getElementById('port') as HTMLInputElement;
+  const keepaliveInput = document.getElementById(
+    'keepalive',
+  ) as HTMLInputElement;
+  const topologySelect = document.getElementById(
+    'topology',
+  ) as HTMLSelectElement;
+
+  subnetInput.addEventListener('input', () => {
+    updateNetwork({ subnet: subnetInput.value });
+  });
+
+  portInput.addEventListener('input', () => {
+    const val = parseInt(portInput.value, 10);
+    if (!isNaN(val)) updateNetwork({ port: val });
+  });
+
+  keepaliveInput.addEventListener('input', () => {
+    const val = parseInt(keepaliveInput.value, 10);
+    if (!isNaN(val)) updateNetwork({ keepalive: val });
+  });
+
+  topologySelect.addEventListener('change', () => {
+    updateNetwork({ topology: topologySelect.value as Topology });
+  });
+</script>

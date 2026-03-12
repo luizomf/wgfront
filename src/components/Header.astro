@@ -1,0 +1,63 @@
+---
+---
+
+<header class="header">
+  <h1 class="header__title">
+    <span class="header__bracket">[</span>
+    WireGuard Config Generator
+    <span class="header__bracket">]</span>
+  </h1>
+  <p class="header__tagline">
+    Generate WireGuard configs in your browser. No server. No tracking. Just
+    math.
+  </p>
+  <div class="header__warning" id="crypto-warning" hidden>
+    Your browser does not support X25519 key generation. Please use a modern
+    browser (Chrome 113+, Firefox 130+, Safari 17.4+).
+  </div>
+</header>
+
+<style>
+  .header {
+    text-align: center;
+    padding: 3rem 0 2rem;
+  }
+
+  .header__title {
+    font-size: 1.75rem;
+    color: var(--accent);
+    text-shadow: 0 0 20px rgba(0, 255, 159, 0.4),
+      0 0 40px rgba(0, 255, 159, 0.15);
+    letter-spacing: -0.02em;
+  }
+
+  .header__bracket {
+    opacity: 0.4;
+  }
+
+  .header__tagline {
+    margin-top: 0.75rem;
+    font-size: 1rem;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  .header__warning {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--danger-glow);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--danger);
+    font-size: 1rem;
+  }
+</style>
+
+<script>
+  import { isX25519Supported } from '../lib/crypto';
+
+  if (!isX25519Supported()) {
+    const warning = document.getElementById('crypto-warning');
+    if (warning) warning.hidden = false;
+  }
+</script>

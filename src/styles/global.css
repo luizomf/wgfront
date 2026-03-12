@@ -1,0 +1,222 @@
+/* === Design Tokens === */
+:root {
+  --bg-primary: #0a0e14;
+  --bg-secondary: #111922;
+  --bg-card: #141c27;
+  --bg-input: #0d1117;
+  --border: #1e2d3d;
+  --border-focus: #00ff9f;
+  --text-primary: #e0e0e0;
+  --text-secondary: #8899aa;
+  --text-muted: #556677;
+  --accent: #00ff9f;
+  --accent-dim: #00cc7f;
+  --accent-glow: rgba(0, 255, 159, 0.15);
+  --danger: #ff4466;
+  --danger-glow: rgba(255, 68, 102, 0.15);
+  --syntax-keyword: #c792ea;
+  --syntax-string: #c3e88d;
+  --syntax-comment: #546e7a;
+  --syntax-value: #f78c6c;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --radius: 6px;
+  --glow-sm: 0 0 8px rgba(0, 255, 159, 0.3);
+  --glow-md: 0 0 16px rgba(0, 255, 159, 0.2);
+  --transition: 150ms ease;
+}
+
+/* === Font Face === */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* === Reset === */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-mono);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* === CRT Scanlines Overlay === */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.03) 0px,
+    rgba(0, 0, 0, 0.03) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* === Typography === */
+h1, h2, h3 {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* === Form Elements === */
+input, select {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+input:focus, select:focus {
+  border-color: var(--border-focus);
+  box-shadow: var(--glow-sm);
+}
+
+input::placeholder {
+  color: var(--text-muted);
+}
+
+label {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* === Buttons === */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  box-shadow: var(--glow-sm);
+  color: var(--accent);
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn--accent {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.btn--accent:hover {
+  background: var(--accent-glow);
+  box-shadow: var(--glow-md);
+}
+
+.btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn--danger:hover {
+  background: var(--danger-glow);
+  box-shadow: 0 0 8px rgba(255, 68, 102, 0.3);
+}
+
+.btn--sm {
+  font-size: 1rem;
+  padding: 0.25rem 0.625rem;
+}
+
+/* === Layout === */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.section {
+  margin-bottom: 2.5rem;
+}
+
+/* === Card === */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+/* === Utilities === */
+.text-accent { color: var(--accent); }
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+.glow { text-shadow: 0 0 10px rgba(0, 255, 159, 0.5); }
+
+/* === Scrollbar === */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* === Responsive === */
+@media (max-width: 640px) {
+  html { font-size: 16px; }
+  .container { padding: 1rem; }
+}

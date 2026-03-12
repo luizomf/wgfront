@@ -1,0 +1,20 @@
+---
+import Base from '../layouts/Base.astro';
+import Header from '../components/Header.astro';
+import NetworkSettings from '../components/NetworkSettings.astro';
+import PeerList from '../components/PeerList.astro';
+import ConfigPreview from '../components/ConfigPreview.astro';
+import ActionBar from '../components/ActionBar.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<Base title="WireGuard Config Generator">
+  <main class="container">
+    <Header />
+    <NetworkSettings />
+    <PeerList />
+    <ConfigPreview />
+    <ActionBar />
+    <Footer />
+  </main>
+</Base>

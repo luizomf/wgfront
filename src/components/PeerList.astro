@@ -1,0 +1,230 @@
+---
+---
+
+<section class="section" id="peer-list-section">
+  <div class="peers__header">
+    <h2 class="peers__title text-secondary">Nodes</h2>
+    <button class="btn btn--accent" id="add-peer-btn">[+ ADD NODE]</button>
+  </div>
+  <div class="peers__grid" id="peers-container"></div>
+  <p class="peers__empty text-muted" id="peers-empty">
+    No nodes yet. Click [+ ADD NODE] to get started.
+  </p>
+</section>
+
+<style>
+  .peers__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .peers__title {
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .peers__grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  }
+
+  .peers__empty {
+    text-align: center;
+    padding: 2rem;
+    font-size: 1rem;
+  }
+
+  @media (max-width: 640px) {
+    .peers__grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<script>
+  import { addPeer, updatePeer, removePeer, subscribe, getState } from '../lib/store';
+  import type { Peer, PeerRole } from '../lib/types';
+
+  const container = document.getElementById('peers-container')!;
+  const emptyMsg = document.getElementById('peers-empty')!;
+  const addBtn = document.getElementById('add-peer-btn')!;
+
+  addBtn.addEventListener('click', async () => {
+    addBtn.setAttribute('disabled', '');
+    addBtn.textContent = '[GENERATING...]';
+    await addPeer();
+    addBtn.removeAttribute('disabled');
+    addBtn.textContent = '[+ ADD NODE]';
+  });
+
+  function createPeerCard(peer: Peer): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'card peer-card';
+    card.dataset.peerId = peer.id;
+
+    const isHubSpoke = getState().network.topology === 'hub-spoke';
+
+    card.innerHTML = `
+      <div class="peer-card__header">
+        <span class="peer-card__id text-accent">#${peer.id}</span>
+        <div class="peer-card__actions">
+          <button class="btn btn--sm peer-card__role ${isHubSpoke ? '' : 'peer-card__role--hidden'}"
+            data-role="${peer.role}">[${peer.role.toUpperCase()}]</button>
+          <button class="btn btn--danger btn--sm peer-card__remove">[x]</button>
+        </div>
+      </div>
+      <div class="peer-card__fields">
+        <div class="peer-card__field">
+          <label>Name</label>
+          <input type="text" data-field="name" value="${escapeAttr(peer.name)}" placeholder="hostname" />
+        </div>
+        <div class="peer-card__field">
+          <label>Label</label>
+          <input type="text" data-field="label" value="${escapeAttr(peer.label)}" placeholder="Description" />
+        </div>
+        <div class="peer-card__field">
+          <label>LAN IP</label>
+          <input type="text" data-field="lanIp" value="${escapeAttr(peer.lanIp)}" placeholder="192.168.0.100" />
+        </div>
+        <div class="peer-card__field">
+          <label>Public Endpoint</label>
+          <input type="text" data-field="publicEndpointIp" value="${escapeAttr(peer.publicEndpointIp)}" placeholder="(optional)" />
+        </div>
+        <div class="peer-card__field peer-card__field--short">
+          <label>WG Octet</label>
+          <input type="number" data-field="wgOctet" value="${peer.wgOctet}" min="1" max="254" />
+        </div>
+      </div>
+      <div class="peer-card__key text-muted">
+        pubkey: ${peer.keys.publicKey.substring(0, 20)}...
+      </div>
+    `;
+
+    card.querySelector('.peer-card__remove')!.addEventListener('click', () => {
+      removePeer(peer.id);
+    });
+
+    card.querySelector('.peer-card__role')!.addEventListener('click', () => {
+      const current = getState().peers.find((p) => p.id === peer.id);
+      if (!current) return;
+      const newRole: PeerRole = current.role === 'hub' ? 'spoke' : 'hub';
+      updatePeer(peer.id, { role: newRole });
+    });
+
+    card.querySelectorAll('input').forEach((input) => {
+      input.addEventListener('input', () => {
+        const field = input.dataset.field!;
+        const value = field === 'wgOctet' ? parseInt(input.value, 10) : input.value;
+        updatePeer(peer.id, { [field]: value } as Partial<Peer>);
+      });
+    });
+
+    return card;
+  }
+
+  function escapeAttr(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function render(): void {
+    const { peers, network } = getState();
+    const isHubSpoke = network.topology === 'hub-spoke';
+    emptyMsg.hidden = peers.length > 0;
+
+    const existingIds = new Set<string>();
+    container.querySelectorAll<HTMLElement>('.peer-card').forEach((card) => {
+      const id = card.dataset.peerId!;
+      if (!peers.find((p) => p.id === id)) {
+        card.remove();
+      } else {
+        existingIds.add(id);
+      }
+    });
+
+    for (const peer of peers) {
+      if (existingIds.has(peer.id)) {
+        const card = container.querySelector<HTMLElement>(`[data-peer-id="${peer.id}"]`)!;
+        const keyEl = card.querySelector('.peer-card__key')!;
+        keyEl.textContent = `pubkey: ${peer.keys.publicKey.substring(0, 20)}...`;
+
+        const roleBtn = card.querySelector<HTMLElement>('.peer-card__role')!;
+        roleBtn.textContent = `[${peer.role.toUpperCase()}]`;
+        roleBtn.dataset.role = peer.role;
+        roleBtn.classList.toggle('peer-card__role--hidden', !isHubSpoke);
+        continue;
+      }
+      container.appendChild(createPeerCard(peer));
+    }
+  }
+
+  subscribe(render);
+  render();
+</script>
+
+<style is:global>
+  .peer-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .peer-card__id {
+    font-weight: 700;
+    font-size: 1rem;
+  }
+
+  .peer-card__fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.625rem;
+  }
+
+  .peer-card__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .peer-card__field input {
+    width: 100%;
+  }
+
+  .peer-card__field--short {
+    max-width: 120px;
+  }
+
+  .peer-card__actions {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  .peer-card__role {
+    transition: all var(--transition);
+  }
+
+  .peer-card__role[data-role="hub"] {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .peer-card__role[data-role="spoke"] {
+    border-color: var(--text-muted);
+    color: var(--text-secondary);
+  }
+
+  .peer-card__role--hidden {
+    display: none;
+  }
+
+  .peer-card__key {
+    margin-top: 0.75rem;
+    font-size: 1rem;
+    word-break: break-all;
+  }
+</style>
