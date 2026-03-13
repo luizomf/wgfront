@@ -39,7 +39,7 @@ describe('generateConfig', () => {
     expect(config).toContain('[Interface]');
     expect(config).toContain(`PrivateKey = ${self.keys.privateKey}`);
     expect(config).toContain('ListenPort = 51820');
-    expect(config).toContain('Address = 10.100.0.1/24');
+    expect(config).toContain('Address = 10.100.0.1/24, fd10:100::1/64');
   });
 
   it('does not include self as a peer', () => {
@@ -68,7 +68,7 @@ describe('generateConfig', () => {
 
     expect(config).toContain('[Peer]');
     expect(config).toContain(`PublicKey = ${other.keys.publicKey}`);
-    expect(config).toContain('AllowedIPs = 10.100.0.2/32');
+    expect(config).toContain('AllowedIPs = 10.100.0.2/32, fd10:100::2/128');
     expect(config).toContain('Endpoint = 76.13.71.178:51820');
     expect(config).toContain('PersistentKeepalive = 25');
   });
@@ -127,8 +127,8 @@ describe('hub-spoke topology', () => {
 
     const config = generateConfig(hub, [hub, spoke1, spoke2], hubSpokeNetwork);
 
-    expect(config).toContain('AllowedIPs = 10.100.0.2/32');
-    expect(config).toContain('AllowedIPs = 10.100.0.3/32');
+    expect(config).toContain('AllowedIPs = 10.100.0.2/32, fd10:100::2/128');
+    expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
   });
 
   it('spoke only sees hubs', () => {
@@ -138,8 +138,8 @@ describe('hub-spoke topology', () => {
 
     const config = generateConfig(spoke1, [hub, spoke1, spoke2], hubSpokeNetwork);
 
-    expect(config).toContain('AllowedIPs = 10.100.0.1/32');
-    expect(config).not.toContain('AllowedIPs = 10.100.0.3/32');
+    expect(config).toContain('AllowedIPs = 10.100.0.1/32, fd10:100::1/128');
+    expect(config).not.toContain('10.100.0.3/32');
   });
 
   it('mesh topology ignores roles', () => {
@@ -149,8 +149,8 @@ describe('hub-spoke topology', () => {
 
     const config = generateConfig(spoke1, [hub, spoke1, spoke2], network);
 
-    expect(config).toContain('AllowedIPs = 10.100.0.1/32');
-    expect(config).toContain('AllowedIPs = 10.100.0.3/32');
+    expect(config).toContain('AllowedIPs = 10.100.0.1/32, fd10:100::1/128');
+    expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
   });
 });
 
@@ -161,7 +161,7 @@ describe('full tunnel', () => {
 
     const config = generateConfig(self, [self, hub], network);
 
-    expect(config).toContain('DNS = 1.1.1.1, 1.0.0.1');
+    expect(config).toContain('DNS = 1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001');
     expect(config).toContain('AllowedIPs = 0.0.0.0/0, ::/0');
     expect(config).not.toContain('AllowedIPs = 10.100.0.2/32');
   });
@@ -173,7 +173,7 @@ describe('full tunnel', () => {
     const config = generateConfig(self, [self, hub], network);
 
     expect(config).not.toContain('DNS');
-    expect(config).toContain('AllowedIPs = 10.100.0.2/32');
+    expect(config).toContain('AllowedIPs = 10.100.0.2/32, fd10:100::2/128');
   });
 
   it('only assigns 0.0.0.0/0 to first peer to avoid routing conflicts', () => {
@@ -185,7 +185,7 @@ describe('full tunnel', () => {
 
     const matches = config.match(/AllowedIPs = 0\.0\.0\.0\/0/g);
     expect(matches).toHaveLength(1);
-    expect(config).toContain('AllowedIPs = 10.100.0.3/32');
+    expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
   });
 });
 
@@ -197,6 +197,6 @@ describe('generateKeySummary', () => {
     expect(summary).toContain('peer1');
     expect(summary).toContain(`private: ${peer.keys.privateKey}`);
     expect(summary).toContain(`public : ${peer.keys.publicKey}`);
-    expect(summary).toContain('wg ip  : 10.100.0.1/24');
+    expect(summary).toContain('wg ip  : 10.100.0.1/24, fd10:100::1/64');
   });
 });

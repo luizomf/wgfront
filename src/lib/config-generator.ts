@@ -4,6 +4,10 @@ function peerWgIp(subnet: string, octet: number): string {
   return `${subnet}.${octet}`;
 }
 
+function peerWgIp6(octet: number): string {
+  return `fd10:100::${octet}`;
+}
+
 function peerEndpoint(peer: Peer): string {
   return peer.publicEndpointIp || peer.lanIp;
 }
@@ -17,6 +21,8 @@ function buildPeerBlock(
   const endpoint = peerEndpoint(peer);
   const lines: string[] = [];
 
+  const wgIp6 = peerWgIp6(peer.wgOctet);
+
   lines.push(`# ${peer.label} - ${endpoint}:${network.port} -> ${wgIp}/32`);
   lines.push('[Peer]');
   lines.push(`PublicKey = ${peer.keys.publicKey}`);
@@ -24,7 +30,7 @@ function buildPeerBlock(
   if (useFullTunnel) {
     lines.push('AllowedIPs = 0.0.0.0/0, ::/0');
   } else {
-    lines.push(`AllowedIPs = ${wgIp}/32`);
+    lines.push(`AllowedIPs = ${wgIp}/32, ${wgIp6}/128`);
   }
 
   if (peer.publicEndpointIp) {
@@ -62,10 +68,11 @@ export function generateConfig(
   lines.push('[Interface]');
   lines.push(`PrivateKey = ${self.keys.privateKey}`);
   lines.push(`ListenPort = ${network.port}`);
-  lines.push(`Address = ${selfWgIp}/24`);
+  const selfWgIp6 = peerWgIp6(self.wgOctet);
+  lines.push(`Address = ${selfWgIp}/24, ${selfWgIp6}/64`);
 
   if (self.fullTunnel) {
-    lines.push('DNS = 1.1.1.1, 1.0.0.1');
+    lines.push('DNS = 1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001');
   }
 
   lines.push('');
@@ -106,7 +113,8 @@ export function generateKeySummary(
     lines.push(peer.name);
     lines.push(`  private: ${peer.keys.privateKey}`);
     lines.push(`  public : ${peer.keys.publicKey}`);
-    lines.push(`  wg ip  : ${wgIp}/24`);
+    const wgIp6 = peerWgIp6(peer.wgOctet);
+    lines.push(`  wg ip  : ${wgIp}/24, ${wgIp6}/64`);
     lines.push('');
   }
 
