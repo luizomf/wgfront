@@ -62,6 +62,7 @@ export async function addPeer(): Promise<void> {
     wgOctet: octet,
     keys,
     role: state.peers.length === 0 ? 'hub' : 'spoke',
+    fullTunnel: false,
   };
 
   state = { ...state, peers: [...state.peers, peer] };

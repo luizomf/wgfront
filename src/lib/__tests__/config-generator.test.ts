@@ -15,6 +15,7 @@ function makePeer(overrides: Partial<Peer> = {}): Peer {
     publicEndpointIp: '',
     wgOctet: 1,
     role: 'hub',
+    fullTunnel: false,
     keys: {
       privateKey: 'cFBBbVdGcGxWZWN0b3JUZXN0S2V5UHJpdmF0ZTEyMw==',
       publicKey: 'cFBCbFZlY3RvclRlc3RLZXlQdWJsaWMxMjM0NTY3OA==',
@@ -149,6 +150,41 @@ describe('hub-spoke topology', () => {
     const config = generateConfig(spoke1, [hub, spoke1, spoke2], network);
 
     expect(config).toContain('AllowedIPs = 10.100.0.1/32');
+    expect(config).toContain('AllowedIPs = 10.100.0.3/32');
+  });
+});
+
+describe('full tunnel', () => {
+  it('adds DNS and 0.0.0.0/0 when fullTunnel is true', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
+    const hub = makePeer({ id: '2', wgOctet: 2, publicEndpointIp: '1.2.3.4' });
+
+    const config = generateConfig(self, [self, hub], network);
+
+    expect(config).toContain('DNS = 1.1.1.1, 1.0.0.1');
+    expect(config).toContain('AllowedIPs = 0.0.0.0/0, ::/0');
+    expect(config).not.toContain('AllowedIPs = 10.100.0.2/32');
+  });
+
+  it('does not add DNS or 0.0.0.0/0 when fullTunnel is false', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: false });
+    const hub = makePeer({ id: '2', wgOctet: 2 });
+
+    const config = generateConfig(self, [self, hub], network);
+
+    expect(config).not.toContain('DNS');
+    expect(config).toContain('AllowedIPs = 10.100.0.2/32');
+  });
+
+  it('only assigns 0.0.0.0/0 to first peer to avoid routing conflicts', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
+    const peer2 = makePeer({ id: '2', wgOctet: 2 });
+    const peer3 = makePeer({ id: '3', wgOctet: 3 });
+
+    const config = generateConfig(self, [self, peer2, peer3], network);
+
+    const matches = config.match(/AllowedIPs = 0\.0\.0\.0\/0/g);
+    expect(matches).toHaveLength(1);
     expect(config).toContain('AllowedIPs = 10.100.0.3/32');
   });
 });

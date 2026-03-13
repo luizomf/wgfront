@@ -11,6 +11,7 @@ function peerEndpoint(peer: Peer): string {
 function buildPeerBlock(
   peer: Peer,
   network: NetworkConfig,
+  useFullTunnel: boolean,
 ): string {
   const wgIp = peerWgIp(network.subnet, peer.wgOctet);
   const endpoint = peerEndpoint(peer);
@@ -19,7 +20,12 @@ function buildPeerBlock(
   lines.push(`# ${peer.label} - ${endpoint}:${network.port} -> ${wgIp}/32`);
   lines.push('[Peer]');
   lines.push(`PublicKey = ${peer.keys.publicKey}`);
-  lines.push(`AllowedIPs = ${wgIp}/32`);
+
+  if (useFullTunnel) {
+    lines.push('AllowedIPs = 0.0.0.0/0, ::/0');
+  } else {
+    lines.push(`AllowedIPs = ${wgIp}/32`);
+  }
 
   if (peer.publicEndpointIp) {
     lines.push(`Endpoint = ${peer.publicEndpointIp}:${network.port}`);
@@ -57,11 +63,21 @@ export function generateConfig(
   lines.push(`PrivateKey = ${self.keys.privateKey}`);
   lines.push(`ListenPort = ${network.port}`);
   lines.push(`Address = ${selfWgIp}/24`);
+
+  if (self.fullTunnel) {
+    lines.push('DNS = 1.1.1.1, 1.0.0.1');
+  }
+
   lines.push('');
 
   const visiblePeers = peersForNode(self, allPeers, network.topology);
+
+  // Full tunnel: only the first peer gets 0.0.0.0/0 (avoids routing conflicts)
+  let fullTunnelAssigned = false;
   for (const peer of visiblePeers) {
-    lines.push(buildPeerBlock(peer, network));
+    const useFullTunnel = self.fullTunnel && !fullTunnelAssigned;
+    if (useFullTunnel) fullTunnelAssigned = true;
+    lines.push(buildPeerBlock(peer, network, useFullTunnel));
   }
 
   return lines.join('\n');

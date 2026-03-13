@@ -15,6 +15,7 @@ export interface Peer {
   wgOctet: number;
   keys: KeyPair;
   role: PeerRole;
+  fullTunnel: boolean;
 }
 
 export interface NetworkConfig {
