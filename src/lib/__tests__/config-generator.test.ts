@@ -131,15 +131,25 @@ describe('hub-spoke topology', () => {
     expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
   });
 
-  it('spoke only sees hubs', () => {
+  it('spoke routes entire subnet through hub', () => {
     const hub = makePeer({ id: '1', role: 'hub', wgOctet: 1 });
     const spoke1 = makePeer({ id: '2', role: 'spoke', wgOctet: 2 });
     const spoke2 = makePeer({ id: '3', role: 'spoke', wgOctet: 3 });
 
     const config = generateConfig(spoke1, [hub, spoke1, spoke2], hubSpokeNetwork);
 
-    expect(config).toContain('AllowedIPs = 10.100.0.1/32, fd10:100::1/128');
+    expect(config).toContain('AllowedIPs = 10.100.0.0/24, fd10:100::/64');
     expect(config).not.toContain('10.100.0.3/32');
+  });
+
+  it('hub keeps /32 per spoke', () => {
+    const hub = makePeer({ id: '1', role: 'hub', wgOctet: 1 });
+    const spoke1 = makePeer({ id: '2', role: 'spoke', wgOctet: 2 });
+
+    const config = generateConfig(hub, [hub, spoke1], hubSpokeNetwork);
+
+    expect(config).toContain('AllowedIPs = 10.100.0.2/32, fd10:100::2/128');
+    expect(config).not.toContain('10.100.0.0/24');
   });
 
   it('mesh topology ignores roles', () => {

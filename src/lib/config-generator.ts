@@ -12,10 +12,15 @@ function peerEndpoint(peer: Peer): string {
   return peer.publicEndpointIp || peer.lanIp;
 }
 
+interface PeerBlockOptions {
+  useFullTunnel: boolean;
+  useSubnetRoute: boolean;
+}
+
 function buildPeerBlock(
   peer: Peer,
   network: NetworkConfig,
-  useFullTunnel: boolean,
+  options: PeerBlockOptions,
 ): string {
   const wgIp = peerWgIp(network.subnet, peer.wgOctet);
   const endpoint = peerEndpoint(peer);
@@ -27,8 +32,10 @@ function buildPeerBlock(
   lines.push('[Peer]');
   lines.push(`PublicKey = ${peer.keys.publicKey}`);
 
-  if (useFullTunnel) {
+  if (options.useFullTunnel) {
     lines.push('AllowedIPs = 0.0.0.0/0, ::/0');
+  } else if (options.useSubnetRoute) {
+    lines.push(`AllowedIPs = ${network.subnet}.0/24, fd10:100::/64`);
   } else {
     lines.push(`AllowedIPs = ${wgIp}/32, ${wgIp6}/128`);
   }
@@ -79,12 +86,18 @@ export function generateConfig(
 
   const visiblePeers = peersForNode(self, allPeers, network.topology);
 
+  const isSpoke = network.topology === 'hub-spoke' && self.role === 'spoke';
+
   // Full tunnel: only the first peer gets 0.0.0.0/0 (avoids routing conflicts)
   let fullTunnelAssigned = false;
   for (const peer of visiblePeers) {
     const useFullTunnel = self.fullTunnel && !fullTunnelAssigned;
     if (useFullTunnel) fullTunnelAssigned = true;
-    lines.push(buildPeerBlock(peer, network, useFullTunnel));
+
+    // Spokes route the entire WG subnet through hubs
+    const useSubnetRoute = isSpoke && peer.role === 'hub' && !useFullTunnel;
+
+    lines.push(buildPeerBlock(peer, network, { useFullTunnel, useSubnetRoute }));
   }
 
   return lines.join('\n');
