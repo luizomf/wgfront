@@ -6,6 +6,15 @@
     Feito com <span class="text-accent">Web Crypto API</span>. Nenhum dado sai
     do seu navegador.
   </p>
+  <p class="footer__links">
+    <a href="https://github.com/luizomf/wgfront" target="_blank" rel="noopener">
+      GitHub
+    </a>
+    <span class="footer__sep">|</span>
+    <a href="https://www.otaviomiranda.com.br" target="_blank" rel="noopener">
+      otaviomiranda.com.br
+    </a>
+  </p>
 </footer>
 
 <style>
@@ -18,5 +27,24 @@
   .footer__text {
     font-size: 1rem;
     color: var(--text-muted);
+  }
+
+  .footer__links {
+    margin-top: 0.5rem;
+    font-size: 1rem;
+  }
+
+  .footer__links a {
+    color: var(--text-muted);
+    transition: color var(--transition);
+  }
+
+  .footer__links a:hover {
+    color: var(--accent);
+  }
+
+  .footer__sep {
+    margin: 0 0.5rem;
+    color: var(--border);
   }
 </style>
