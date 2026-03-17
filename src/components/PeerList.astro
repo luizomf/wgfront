@@ -100,10 +100,20 @@
         </div>
       </div>
       <div class="peer-card__footer">
-        <label class="peer-card__tunnel">
-          <input type="checkbox" data-field="fullTunnel" ${peer.fullTunnel ? 'checked' : ''} />
-          Full Tunnel
-        </label>
+        <div class="peer-card__options">
+          <label class="peer-card__check">
+            <input type="checkbox" data-field="fullTunnel" ${peer.fullTunnel ? 'checked' : ''} />
+            Full Tunnel
+          </label>
+          <label class="peer-card__check">
+            <input type="checkbox" data-field="natGateway" ${peer.natGateway ? 'checked' : ''} />
+            NAT Gateway
+          </label>
+          <div class="peer-card__nat-iface ${peer.natGateway ? '' : 'peer-card__nat-iface--hidden'}">
+            <label>Interface</label>
+            <input type="text" data-field="natInterface" value="${escapeAttr(peer.natInterface)}" placeholder="eth0" />
+          </div>
+        </div>
         <span class="peer-card__key text-muted">
           pubkey: ${peer.keys.publicKey.substring(0, 20)}...
         </span>
@@ -132,6 +142,16 @@
     const tunnelCheckbox = card.querySelector<HTMLInputElement>('input[data-field="fullTunnel"]')!;
     tunnelCheckbox.addEventListener('change', () => {
       updatePeer(peer.id, { fullTunnel: tunnelCheckbox.checked });
+    });
+
+    const natCheckbox = card.querySelector<HTMLInputElement>('input[data-field="natGateway"]')!;
+    natCheckbox.addEventListener('change', () => {
+      updatePeer(peer.id, { natGateway: natCheckbox.checked });
+    });
+
+    const natIfaceInput = card.querySelector<HTMLInputElement>('input[data-field="natInterface"]')!;
+    natIfaceInput.addEventListener('input', () => {
+      updatePeer(peer.id, { natInterface: natIfaceInput.value });
     });
 
     return card;
@@ -164,6 +184,12 @@
 
         const tunnelCb = card.querySelector<HTMLInputElement>('input[data-field="fullTunnel"]')!;
         tunnelCb.checked = peer.fullTunnel;
+
+        const natCb = card.querySelector<HTMLInputElement>('input[data-field="natGateway"]')!;
+        natCb.checked = peer.natGateway;
+
+        const natIfaceWrap = card.querySelector<HTMLElement>('.peer-card__nat-iface')!;
+        natIfaceWrap.classList.toggle('peer-card__nat-iface--hidden', !peer.natGateway);
 
         const roleBtn = card.querySelector<HTMLElement>('.peer-card__role')!;
         roleBtn.textContent = `[${peer.role.toUpperCase()}]`;
@@ -245,7 +271,14 @@
     gap: 0.5rem;
   }
 
-  .peer-card__tunnel {
+  .peer-card__options {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .peer-card__check {
     display: flex;
     align-items: center;
     gap: 0.375rem;
@@ -255,11 +288,25 @@
     text-transform: none;
   }
 
-  .peer-card__tunnel input[type="checkbox"] {
+  .peer-card__check input[type="checkbox"] {
     accent-color: var(--accent);
     width: 1rem;
     height: 1rem;
     cursor: pointer;
+  }
+
+  .peer-card__nat-iface {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .peer-card__nat-iface input {
+    width: 7rem;
+  }
+
+  .peer-card__nat-iface--hidden {
+    display: none;
   }
 
   .peer-card__key {

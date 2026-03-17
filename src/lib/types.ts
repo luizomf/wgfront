@@ -16,6 +16,8 @@ export interface Peer {
   keys: KeyPair;
   role: PeerRole;
   fullTunnel: boolean;
+  natGateway: boolean;
+  natInterface: string;
 }
 
 export interface NetworkConfig {

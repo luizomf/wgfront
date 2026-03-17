@@ -63,6 +63,8 @@ export async function addPeer(): Promise<void> {
     keys,
     role: state.peers.length === 0 ? 'hub' : 'spoke',
     fullTunnel: false,
+    natGateway: false,
+    natInterface: 'eth0',
   };
 
   state = { ...state, peers: [...state.peers, peer] };

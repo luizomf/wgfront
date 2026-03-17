@@ -16,6 +16,8 @@ function makePeer(overrides: Partial<Peer> = {}): Peer {
     wgOctet: 1,
     role: 'hub',
     fullTunnel: false,
+    natGateway: false,
+    natInterface: 'eth0',
     keys: {
       privateKey: 'cFBBbVdGcGxWZWN0b3JUZXN0S2V5UHJpdmF0ZTEyMw==',
       publicKey: 'cFBCbFZlY3RvclRlc3RLZXlQdWJsaWMxMjM0NTY3OA==',
@@ -196,6 +198,41 @@ describe('full tunnel', () => {
     const matches = config.match(/AllowedIPs = 0\.0\.0\.0\/0/g);
     expect(matches).toHaveLength(1);
     expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
+  });
+});
+
+describe('NAT gateway', () => {
+  it('adds PostUp/PostDown rules when natGateway is true', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, natGateway: true, natInterface: 'ens3' });
+    const other = makePeer({ id: '2', wgOctet: 2 });
+
+    const config = generateConfig(self, [self, other], network);
+
+    expect(config).toContain('PostUp = sysctl -w net.ipv4.ip_forward=1');
+    expect(config).toContain('PostUp = sysctl -w net.ipv6.conf.all.forwarding=1');
+    expect(config).toContain('PostUp = iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE');
+    expect(config).toContain('PostUp = ip6tables -t nat -A POSTROUTING -o ens3 -j MASQUERADE');
+    expect(config).toContain('PostDown = iptables -t nat -D POSTROUTING -o ens3 -j MASQUERADE');
+    expect(config).toContain('PostDown = sysctl -w net.ipv4.ip_forward=0');
+  });
+
+  it('does not add NAT rules when natGateway is false', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, natGateway: false });
+    const other = makePeer({ id: '2', wgOctet: 2 });
+
+    const config = generateConfig(self, [self, other], network);
+
+    expect(config).not.toContain('PostUp');
+    expect(config).not.toContain('PostDown');
+  });
+
+  it('defaults to eth0 when natInterface is empty', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, natGateway: true, natInterface: '' });
+    const other = makePeer({ id: '2', wgOctet: 2 });
+
+    const config = generateConfig(self, [self, other], network);
+
+    expect(config).toContain('PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE');
   });
 });
 

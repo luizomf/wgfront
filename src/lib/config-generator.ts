@@ -82,6 +82,32 @@ export function generateConfig(
     lines.push('DNS = 1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001');
   }
 
+  if (self.natGateway) {
+    const iface = self.natInterface || 'eth0';
+    lines.push('');
+    lines.push('# Habilita o encaminhamento de pacotes');
+    lines.push('PostUp = sysctl -w net.ipv4.ip_forward=1');
+    lines.push('PostUp = sysctl -w net.ipv6.conf.all.forwarding=1');
+    lines.push('');
+    lines.push('# Regras de firewall para NAT masquerading');
+    lines.push(`PostUp = iptables -A FORWARD -i %i -j ACCEPT`);
+    lines.push(`PostUp = iptables -A FORWARD -o %i -m state --state RELATED,ESTABLISHED -j ACCEPT`);
+    lines.push(`PostUp = iptables -t nat -A POSTROUTING -o ${iface} -j MASQUERADE`);
+    lines.push(`PostUp = ip6tables -A FORWARD -i %i -j ACCEPT`);
+    lines.push(`PostUp = ip6tables -A FORWARD -o %i -m state --state RELATED,ESTABLISHED -j ACCEPT`);
+    lines.push(`PostUp = ip6tables -t nat -A POSTROUTING -o ${iface} -j MASQUERADE`);
+    lines.push('');
+    lines.push('# Limpeza (quando o WireGuard desliga)');
+    lines.push(`PostDown = iptables -D FORWARD -i %i -j ACCEPT`);
+    lines.push(`PostDown = iptables -D FORWARD -o %i -m state --state RELATED,ESTABLISHED -j ACCEPT`);
+    lines.push(`PostDown = iptables -t nat -D POSTROUTING -o ${iface} -j MASQUERADE`);
+    lines.push(`PostDown = ip6tables -D FORWARD -i %i -j ACCEPT`);
+    lines.push(`PostDown = ip6tables -D FORWARD -o %i -m state --state RELATED,ESTABLISHED -j ACCEPT`);
+    lines.push(`PostDown = ip6tables -t nat -D POSTROUTING -o ${iface} -j MASQUERADE`);
+    lines.push('PostDown = sysctl -w net.ipv4.ip_forward=0');
+    lines.push('PostDown = sysctl -w net.ipv6.conf.all.forwarding=0');
+  }
+
   lines.push('');
 
   const visiblePeers = peersForNode(self, allPeers, network.topology);
