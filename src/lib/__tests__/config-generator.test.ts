@@ -188,7 +188,7 @@ describe('full tunnel', () => {
     expect(config).toContain('AllowedIPs = 10.100.0.2/32, fd10:100::2/128');
   });
 
-  it('only assigns 0.0.0.0/0 to first peer to avoid routing conflicts', () => {
+  it('only assigns 0.0.0.0/0 to one peer to avoid routing conflicts', () => {
     const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
     const peer2 = makePeer({ id: '2', wgOctet: 2 });
     const peer3 = makePeer({ id: '3', wgOctet: 3 });
@@ -197,6 +197,33 @@ describe('full tunnel', () => {
 
     const matches = config.match(/AllowedIPs = 0\.0\.0\.0\/0/g);
     expect(matches).toHaveLength(1);
+    expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
+  });
+
+  it('routes full tunnel through NAT gateway peer instead of first peer', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
+    const peer2 = makePeer({ id: '2', wgOctet: 2 });
+    const natPeer = makePeer({ id: '3', wgOctet: 3, natGateway: true, publicEndpointIp: '1.2.3.4' });
+
+    const config = generateConfig(self, [self, peer2, natPeer], network);
+
+    // peer2 should keep /32 (not the full tunnel target)
+    expect(config).toContain('AllowedIPs = 10.100.0.2/32, fd10:100::2/128');
+    // natPeer should get 0.0.0.0/0
+    expect(config).toContain('AllowedIPs = 0.0.0.0/0, ::/0');
+    expect(config).not.toContain('AllowedIPs = 10.100.0.3/32');
+  });
+
+  it('falls back to first peer when no NAT gateway exists', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
+    const peer2 = makePeer({ id: '2', wgOctet: 2 });
+    const peer3 = makePeer({ id: '3', wgOctet: 3 });
+
+    const config = generateConfig(self, [self, peer2, peer3], network);
+
+    // first visible peer gets 0.0.0.0/0
+    expect(config).toContain('AllowedIPs = 0.0.0.0/0, ::/0');
+    // second peer keeps /32
     expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
   });
 });

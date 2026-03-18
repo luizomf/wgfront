@@ -114,11 +114,13 @@ export function generateConfig(
 
   const isSpoke = network.topology === 'hub-spoke' && self.role === 'spoke';
 
-  // Full tunnel: only the first peer gets 0.0.0.0/0 (avoids routing conflicts)
-  let fullTunnelAssigned = false;
+  // Full tunnel: route 0.0.0.0/0 through the NAT gateway peer (or first peer as fallback)
+  const fullTunnelTarget = self.fullTunnel
+    ? visiblePeers.find((p) => p.natGateway)?.id ?? visiblePeers[0]?.id
+    : null;
+
   for (const peer of visiblePeers) {
-    const useFullTunnel = self.fullTunnel && !fullTunnelAssigned;
-    if (useFullTunnel) fullTunnelAssigned = true;
+    const useFullTunnel = peer.id === fullTunnelTarget;
 
     // Spokes route the entire WG subnet through hubs
     const useSubnetRoute = isSpoke && peer.role === 'hub' && !useFullTunnel;
