@@ -15,6 +15,10 @@ export async function generateKeyPair(): Promise<KeyPair> {
     ['deriveBits'],
   );
 
+  if (!('privateKey' in keyPair)) {
+    throw new Error('X25519 did not return a key pair.');
+  }
+
   const pkcs8 = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
   const privateBytes = new Uint8Array(pkcs8).slice(16, 48);
 
