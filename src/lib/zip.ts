@@ -12,6 +12,6 @@ export function downloadZip(entries: ZipEntry[], zipFilename: string): void {
     files[entry.filename] = strToU8(entry.content);
   }
   const zipped = zipSync(files);
-  const blob = new Blob([zipped], { type: 'application/zip' });
+  const blob = new Blob([new Uint8Array(zipped)], { type: 'application/zip' });
   downloadBlob(blob, zipFilename);
 }

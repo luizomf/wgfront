@@ -3,11 +3,20 @@
 
 <section class="section action-bar" id="action-bar" hidden>
   <button class="btn btn--accent" id="regen-keys-btn">[REGERAR CHAVES]</button>
-  <button class="btn btn--accent" id="download-all-btn">[BAIXAR TUDO .zip]</button>
-  <button class="btn" id="copy-all-btn">[COPIAR TUDO]</button>
+  <button class="btn btn--accent" id="download-all-btn" aria-describedby="routing-errors" disabled>[BAIXAR TUDO .zip]</button>
+  <button class="btn" id="copy-all-btn" aria-describedby="routing-errors" disabled>[COPIAR TUDO]</button>
 </section>
 
 <style>
+  .action-bar[hidden] {
+    display: none;
+  }
+
+  .action-bar button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
   .action-bar {
     display: flex;
     gap: 0.75rem;
@@ -26,44 +35,89 @@
   } from '../lib/config-generator';
   import { copyToClipboard } from '../lib/clipboard';
   import { downloadZip } from '../lib/zip';
+  import { validateRouting } from '../lib/routing';
 
   const section = document.getElementById('action-bar')!;
   const regenBtn = document.getElementById('regen-keys-btn')!;
-  const dlAllBtn = document.getElementById('download-all-btn')!;
-  const copyAllBtn = document.getElementById('copy-all-btn')!;
+  const dlAllBtn = document.getElementById('download-all-btn') as HTMLButtonElement;
+  const copyAllBtn = document.getElementById('copy-all-btn') as HTMLButtonElement;
+  let revision = 0;
+
+  function canExport(): boolean {
+    const { peers, network } = getState();
+    return peers.length > 0 && validateRouting(peers, network).length === 0;
+  }
+
+  function update(): void {
+    revision++;
+    section.hidden = getState().peers.length === 0;
+    const disabled = !canExport();
+    dlAllBtn.disabled = disabled;
+    copyAllBtn.disabled = disabled;
+    dlAllBtn.textContent = '[BAIXAR TUDO .zip]';
+    copyAllBtn.textContent = '[COPIAR TUDO]';
+  }
+
+  function generationFailed(): void {
+    dlAllBtn.disabled = true;
+    copyAllBtn.disabled = true;
+    dlAllBtn.textContent = '[ERRO NA CONFIGURAÇÃO]';
+    copyAllBtn.textContent = '[ERRO NA CONFIGURAÇÃO]';
+  }
 
   regenBtn.addEventListener('click', async () => {
     regenBtn.textContent = '[GERANDO...]';
     regenBtn.setAttribute('disabled', '');
-    await regenerateAllKeys();
-    regenBtn.removeAttribute('disabled');
-    regenBtn.textContent = '[REGERAR CHAVES]';
+    try {
+      await regenerateAllKeys();
+      regenBtn.textContent = '[REGERAR CHAVES]';
+    } catch {
+      regenBtn.textContent = '[ERRO — TENTAR REGERAR]';
+    } finally {
+      regenBtn.removeAttribute('disabled');
+    }
   });
 
   dlAllBtn.addEventListener('click', () => {
+    if (!canExport()) {
+      update();
+      return;
+    }
     const state = getState();
-    const configs = generateAllConfigs(state.peers, state.network);
-    const keys = generateKeySummary(state.peers, state.network);
-
-    const entries = [
-      ...configs.map((c) => ({ filename: c.filename, content: c.content })),
-      { filename: 'keys.txt', content: keys },
-    ];
-
-    downloadZip(entries, 'wireguard-configs.zip');
+    try {
+      const configs = generateAllConfigs(state.peers, state.network);
+      const keys = generateKeySummary(state.peers, state.network);
+      const entries = [
+        ...configs.map((c) => ({ filename: c.filename, content: c.content })),
+        { filename: 'keys.txt', content: keys },
+      ];
+      downloadZip(entries, 'wireguard-configs.zip');
+    } catch {
+      generationFailed();
+    }
   });
 
   copyAllBtn.addEventListener('click', async () => {
+    if (!canExport()) {
+      update();
+      return;
+    }
     const state = getState();
-    const configs = generateAllConfigs(state.peers, state.network);
-    const allText = configs.map((c) => `# --- ${c.filename} ---\n${c.content}`).join('\n\n');
-    const ok = await copyToClipboard(allText);
-    copyAllBtn.textContent = ok ? '[COPIADO!]' : '[ERRO]';
-    setTimeout(() => (copyAllBtn.textContent = '[COPIAR TUDO]'), 1500);
+    const copiedRevision = revision;
+    try {
+      const configs = generateAllConfigs(state.peers, state.network);
+      const allText = configs.map((c) => `# --- ${c.filename} ---\n${c.content}`).join('\n\n');
+      const ok = await copyToClipboard(allText);
+      if (revision !== copiedRevision) return;
+      copyAllBtn.textContent = ok ? '[COPIADO!]' : '[ERRO]';
+      setTimeout(() => {
+        if (revision === copiedRevision) copyAllBtn.textContent = '[COPIAR TUDO]';
+      }, 1500);
+    } catch {
+      if (revision === copiedRevision) generationFailed();
+    }
   });
 
-  subscribe((state) => {
-    section.hidden = state.peers.length === 0;
-  });
-  section.hidden = getState().peers.length === 0;
+  subscribe(update);
+  update();
 </script>

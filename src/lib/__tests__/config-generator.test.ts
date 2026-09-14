@@ -16,6 +16,7 @@ function makePeer(overrides: Partial<Peer> = {}): Peer {
     wgOctet: 1,
     role: 'hub',
     fullTunnel: false,
+    gatewayId: '',
     natGateway: false,
     natInterface: 'eth0',
     keys: {
@@ -31,6 +32,7 @@ const network: NetworkConfig = {
   port: 51820,
   keepalive: 25,
   topology: 'mesh',
+  gatewayId: '',
 };
 
 describe('generateConfig', () => {
@@ -120,7 +122,7 @@ describe('generateAllConfigs', () => {
 });
 
 describe('hub-spoke topology', () => {
-  const hubSpokeNetwork: NetworkConfig = { ...network, topology: 'hub-spoke' };
+  const hubSpokeNetwork: NetworkConfig = { ...network, topology: 'hub-spoke', gatewayId: '1' };
 
   it('hub sees all other peers', () => {
     const hub = makePeer({ id: '1', role: 'hub', wgOctet: 1 });
@@ -168,7 +170,7 @@ describe('hub-spoke topology', () => {
 
 describe('full tunnel', () => {
   it('adds DNS and 0.0.0.0/0 when fullTunnel is true', () => {
-    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
+    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true, gatewayId: '2' });
     const hub = makePeer({ id: '2', wgOctet: 2, publicEndpointIp: '1.2.3.4' });
 
     const config = generateConfig(self, [self, hub], network);
@@ -188,8 +190,8 @@ describe('full tunnel', () => {
     expect(config).toContain('AllowedIPs = 10.100.0.2/32, fd10:100::2/128');
   });
 
-  it('only assigns 0.0.0.0/0 to one peer to avoid routing conflicts', () => {
-    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
+  it('only assigns 0.0.0.0/0 to the explicit gateway', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true, gatewayId: '2' });
     const peer2 = makePeer({ id: '2', wgOctet: 2 });
     const peer3 = makePeer({ id: '3', wgOctet: 3 });
 
@@ -200,8 +202,8 @@ describe('full tunnel', () => {
     expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
   });
 
-  it('routes full tunnel through NAT gateway peer instead of first peer', () => {
-    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
+  it('routes full tunnel through the selected NAT gateway instead of first peer', () => {
+    const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true, gatewayId: '3' });
     const peer2 = makePeer({ id: '2', wgOctet: 2 });
     const natPeer = makePeer({ id: '3', wgOctet: 3, natGateway: true, publicEndpointIp: '1.2.3.4' });
 
@@ -214,17 +216,11 @@ describe('full tunnel', () => {
     expect(config).not.toContain('AllowedIPs = 10.100.0.3/32');
   });
 
-  it('falls back to first peer when no NAT gateway exists', () => {
+  it.each([false, true])('rejects an unselected gateway even when NAT is %s', (natGateway) => {
     const self = makePeer({ id: '1', wgOctet: 1, fullTunnel: true });
-    const peer2 = makePeer({ id: '2', wgOctet: 2 });
-    const peer3 = makePeer({ id: '3', wgOctet: 3 });
+    const peer2 = makePeer({ id: '2', wgOctet: 2, natGateway });
 
-    const config = generateConfig(self, [self, peer2, peer3], network);
-
-    // first visible peer gets 0.0.0.0/0
-    expect(config).toContain('AllowedIPs = 0.0.0.0/0, ::/0');
-    // second peer keeps /32
-    expect(config).toContain('AllowedIPs = 10.100.0.3/32, fd10:100::3/128');
+    expect(() => generateConfig(self, [self, peer2], network)).toThrow('Selecione um gateway');
   });
 });
 
@@ -260,6 +256,99 @@ describe('NAT gateway', () => {
     const config = generateConfig(self, [self, other], network);
 
     expect(config).toContain('PostUp = iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE');
+  });
+});
+
+describe('hybrid and multi-hub routing', () => {
+  const hybrid: NetworkConfig = { ...network, topology: 'hybrid', gatewayId: 'kvm8' };
+  const servers = [2, 4, 8].map((octet) => makePeer({
+    id: `kvm${octet}`, name: `kvm${octet}`, label: `kvm${octet}`,
+    wgOctet: octet, role: 'hub', natGateway: octet === 8,
+    publicEndpointIp: `203.0.113.${octet}`,
+    keys: { privateKey: 'test-private', publicKey: `server-${octet}` },
+  }));
+  const clients = [108, 109, 114, 137].map((octet) => makePeer({
+    id: `client${octet}`, name: `client${octet}`, label: `client${octet}`,
+    wgOctet: octet, role: 'spoke', fullTunnel: true,
+    keys: { privateKey: 'test-private', publicKey: `client-${octet}` },
+  }));
+  const peers = [...servers, ...clients];
+
+  function peerBlocks(config: string): Map<string, string> {
+    return new Map(config.split('[Peer]\n').slice(1).map((block) => [
+      block.match(/^PublicKey = (.+)$/m)![1],
+      block.match(/^AllowedIPs = (.+)$/m)![1],
+    ]));
+  }
+
+  it('reproduces three servers and four roaming/LAN clients in both directions', () => {
+    const configs = generateAllConfigs(peers, hybrid);
+    for (const client of clients) {
+      const config = configs.find((c) => c.peerId === client.id)!.content;
+      expect(peerBlocks(config)).toEqual(new Map([
+        ['server-2', '10.100.0.2/32, fd10:100::2/128'],
+        ['server-4', '10.100.0.4/32, fd10:100::4/128'],
+        ['server-8', '0.0.0.0/0, ::/0'],
+      ]));
+      expect(config).not.toContain('10.100.0.0/24');
+      expect(config).not.toContain('192.168.0.0/24');
+      expect(config.match(/^Endpoint = /gm)).toHaveLength(3);
+    }
+    for (const server of servers) {
+      const config = configs.find((c) => c.peerId === server.id)!.content;
+      const blocks = peerBlocks(config);
+      expect(blocks.size).toBe(6);
+      for (const other of peers.filter((peer) => peer.id !== server.id)) {
+        expect(blocks.get(other.keys.publicKey)).toBe(`10.100.0.${other.wgOctet}/32, fd10:100::${other.wgOctet}/128`);
+      }
+      expect(config.match(/^Endpoint = /gm)).toHaveLength(2);
+    }
+  });
+
+  it('keeps split hybrid clients on direct host routes only', () => {
+    const splitPeers = peers.map((peer) => ({ ...peer, fullTunnel: false }));
+    const config = generateConfig(splitPeers[3], splitPeers, { ...hybrid, gatewayId: '' });
+    expect(peerBlocks(config)).toEqual(new Map([
+      ['server-2', '10.100.0.2/32, fd10:100::2/128'],
+      ['server-4', '10.100.0.4/32, fd10:100::4/128'],
+      ['server-8', '10.100.0.8/32, fd10:100::8/128'],
+    ]));
+    expect(config).not.toContain('DNS =');
+  });
+
+  it('assigns the WG subnet to exactly one selected hub in split hub-spoke', () => {
+    const splitPeers = peers.map((peer) => ({ ...peer, fullTunnel: false }));
+    const config = generateConfig(splitPeers[3], splitPeers, { ...hybrid, topology: 'hub-spoke' });
+    expect(peerBlocks(config)).toEqual(new Map([
+      ['server-2', '10.100.0.2/32, fd10:100::2/128'],
+      ['server-4', '10.100.0.4/32, fd10:100::4/128'],
+      ['server-8', '10.100.0.0/24, fd10:100::/64'],
+    ]));
+  });
+
+  it('does not let other hubs steal client traffic from a full tunnel gateway', () => {
+    const config = generateConfig(clients[0], peers, { ...hybrid, topology: 'hub-spoke' });
+    expect(peerBlocks(config).get('server-8')).toBe('0.0.0.0/0, ::/0');
+    expect(config).not.toContain('10.100.0.0/24');
+    expect(config).not.toContain('fd10:100::/64');
+  });
+
+  it('lets a peer override the network gateway without requiring generated NAT', () => {
+    const overridden = peers.map((peer) => peer.id === clients[0].id ? { ...peer, gatewayId: 'kvm4' } : peer);
+    const configs = generateAllConfigs(overridden, hybrid);
+    expect(peerBlocks(configs[3].content).get('server-4')).toBe('0.0.0.0/0, ::/0');
+    expect(peerBlocks(configs[3].content).get('server-8')).toBe('10.100.0.8/32, fd10:100::8/128');
+    expect(peerBlocks(configs[4].content).get('server-8')).toBe('0.0.0.0/0, ::/0');
+  });
+
+  it('does not change route ownership when peers are reordered', () => {
+    expect(peerBlocks(generateConfig(clients[0], [...peers].reverse(), hybrid)))
+      .toEqual(peerBlocks(generateConfig(clients[0], peers, hybrid)));
+  });
+
+  it('refuses to export any configs when the chosen gateway was removed', () => {
+    expect(() => generateAllConfigs(peers.filter((p) => p.id !== 'kvm8'), hybrid))
+      .toThrow('O gateway selecionado precisa existir');
   });
 });
 

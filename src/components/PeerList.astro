@@ -47,7 +47,8 @@
 
 <script>
   import { addPeer, updatePeer, removePeer, subscribe, getState } from '../lib/store';
-  import type { Peer, PeerRole } from '../lib/types';
+  import type { NetworkConfig, Peer, PeerRole } from '../lib/types';
+  import { getGatewayCandidates } from '../lib/routing';
 
   const container = document.getElementById('peers-container')!;
   const emptyMsg = document.getElementById('peers-empty')!;
@@ -56,9 +57,14 @@
   addBtn.addEventListener('click', async () => {
     addBtn.setAttribute('disabled', '');
     addBtn.textContent = '[GERANDO...]';
-    await addPeer();
-    addBtn.removeAttribute('disabled');
-    addBtn.textContent = '[+ ADICIONAR NÓ]';
+    try {
+      await addPeer();
+      addBtn.textContent = '[+ ADICIONAR NÓ]';
+    } catch {
+      addBtn.textContent = '[ERRO — TENTAR ADICIONAR]';
+    } finally {
+      addBtn.removeAttribute('disabled');
+    }
   });
 
   function createPeerCard(peer: Peer): HTMLElement {
@@ -66,13 +72,11 @@
     card.className = 'card peer-card';
     card.dataset.peerId = peer.id;
 
-    const isHubSpoke = getState().network.topology === 'hub-spoke';
-
     card.innerHTML = `
       <div class="peer-card__header">
         <span class="peer-card__id text-accent">#${peer.id}</span>
         <div class="peer-card__actions">
-          <button class="btn btn--sm peer-card__role ${isHubSpoke ? '' : 'peer-card__role--hidden'}"
+          <button class="btn btn--sm peer-card__role"
             data-role="${peer.role}">[${peer.role.toUpperCase()}]</button>
           <button class="btn btn--danger btn--sm peer-card__remove">[x]</button>
         </div>
@@ -99,6 +103,12 @@
           <input type="number" data-field="wgOctet" value="${peer.wgOctet}" min="1" max="254" />
         </div>
       </div>
+      <div class="peer-card__gateway peer-card__field">
+        <label for="peer-gateway-${peer.id}">Gateway deste nó</label>
+        <select id="peer-gateway-${peer.id}" data-field="gatewayId"
+          aria-describedby="peer-gateway-help-${peer.id}"></select>
+        <p class="peer-card__help text-secondary" id="peer-gateway-help-${peer.id}"></p>
+      </div>
       <div class="peer-card__footer">
         <div class="peer-card__options">
           <label class="peer-card__check">
@@ -107,7 +117,7 @@
           </label>
           <label class="peer-card__check">
             <input type="checkbox" data-field="natGateway" ${peer.natGateway ? 'checked' : ''} />
-            NAT Gateway
+            NAT Gateway (firewall)
           </label>
           <div class="peer-card__nat-iface ${peer.natGateway ? '' : 'peer-card__nat-iface--hidden'}">
             <label>Interface</label>
@@ -149,9 +159,9 @@
       updatePeer(peer.id, { natGateway: natCheckbox.checked });
     });
 
-    const natIfaceInput = card.querySelector<HTMLInputElement>('input[data-field="natInterface"]')!;
-    natIfaceInput.addEventListener('input', () => {
-      updatePeer(peer.id, { natInterface: natIfaceInput.value });
+    const gatewaySelect = card.querySelector<HTMLSelectElement>('select[data-field="gatewayId"]')!;
+    gatewaySelect.addEventListener('change', () => {
+      updatePeer(peer.id, { gatewayId: gatewaySelect.value });
     });
 
     return card;
@@ -161,9 +171,59 @@
     return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  const gatewayOptionsKeys = new WeakMap<HTMLSelectElement, string>();
+
+  function renderGateway(card: HTMLElement, peer: Peer, peers: Peer[], network: NetworkConfig): void {
+    const select = card.querySelector<HTMLSelectElement>('select[data-field="gatewayId"]')!;
+    const help = card.querySelector<HTMLElement>('.peer-card__help')!;
+    const candidates = getGatewayCandidates(peer, peers, network);
+    const options = [
+      { value: '', label: 'Herdar padrão da rede', disabled: false },
+      ...candidates.map((candidate) => ({
+        value: candidate.id,
+        label: `${candidate.name || 'Sem nome'} (#${candidate.id})`,
+        disabled: false,
+      })),
+    ];
+    if (peer.gatewayId && !candidates.some((candidate) => candidate.id === peer.gatewayId)) {
+      const unavailable = peers.find((candidate) => candidate.id === peer.gatewayId);
+      options.push({
+        value: peer.gatewayId,
+        label: unavailable
+          ? `${unavailable.name || 'Sem nome'} (#${unavailable.id}) — indisponível para este nó`
+          : `Nó removido (#${peer.gatewayId}) — selecione outro`,
+        disabled: true,
+      });
+    }
+    const optionsKey = JSON.stringify(options);
+    if (gatewayOptionsKeys.get(select) !== optionsKey) {
+      select.replaceChildren(...options.map(({ value, label, disabled }) => {
+        const option = new Option(label, value);
+        option.disabled = disabled;
+        return option;
+      }));
+      gatewayOptionsKeys.set(select, optionsKey);
+    }
+    select.value = peer.gatewayId;
+
+    const gatewayId = peer.gatewayId || network.gatewayId;
+    const gateway = peers.find((candidate) => candidate.id === gatewayId);
+    const available = candidates.some((candidate) => candidate.id === gatewayId);
+    const required = peer.fullTunnel || (network.topology === 'hub-spoke' && peer.role === 'spoke');
+    const source = peer.gatewayId ? 'Gateway próprio' : 'Padrão da rede';
+    const resolved = !gatewayId
+      ? 'não selecionado'
+      : !gateway
+        ? `nó removido (#${gatewayId})`
+        : `${gateway.name || 'Sem nome'} (#${gateway.id})${available ? '' : ' — indisponível para este nó'}`;
+    help.textContent = `${source}: ${resolved}. ${required
+      ? 'Gateway obrigatório para estas rotas.'
+      : 'Não usado neste nó em Split Tunnel.'}`;
+    select.setAttribute('aria-invalid', String(required && !available));
+  }
+
   function render(): void {
     const { peers, network } = getState();
-    const isHubSpoke = network.topology === 'hub-spoke';
     emptyMsg.hidden = peers.length > 0;
 
     const existingIds = new Set<string>();
@@ -176,28 +236,41 @@
       }
     });
 
-    for (const peer of peers) {
-      if (existingIds.has(peer.id)) {
-        const card = container.querySelector<HTMLElement>(`[data-peer-id="${peer.id}"]`)!;
-        const keyEl = card.querySelector('.peer-card__key')!;
-        keyEl.textContent = `pubkey: ${peer.keys.publicKey.substring(0, 20)}...`;
-
-        const tunnelCb = card.querySelector<HTMLInputElement>('input[data-field="fullTunnel"]')!;
-        tunnelCb.checked = peer.fullTunnel;
-
-        const natCb = card.querySelector<HTMLInputElement>('input[data-field="natGateway"]')!;
-        natCb.checked = peer.natGateway;
-
-        const natIfaceWrap = card.querySelector<HTMLElement>('.peer-card__nat-iface')!;
-        natIfaceWrap.classList.toggle('peer-card__nat-iface--hidden', !peer.natGateway);
-
-        const roleBtn = card.querySelector<HTMLElement>('.peer-card__role')!;
-        roleBtn.textContent = `[${peer.role.toUpperCase()}]`;
-        roleBtn.dataset.role = peer.role;
-        roleBtn.classList.toggle('peer-card__role--hidden', !isHubSpoke);
-        continue;
+    for (const [index, peer] of peers.entries()) {
+      const card = existingIds.has(peer.id)
+        ? container.querySelector<HTMLElement>(`[data-peer-id="${peer.id}"]`)!
+        : createPeerCard(peer);
+      if (container.children[index] !== card) {
+        container.insertBefore(card, container.children[index] ?? null);
       }
-      container.appendChild(createPeerCard(peer));
+
+      for (const field of ['name', 'label', 'lanIp', 'publicEndpointIp', 'wgOctet', 'natInterface'] as const) {
+        const input = card.querySelector<HTMLInputElement>(`[data-field="${field}"]`)!;
+        if (input !== document.activeElement) input.value = String(peer[field]);
+      }
+
+      const keyEl = card.querySelector('.peer-card__key')!;
+      keyEl.textContent = `pubkey: ${peer.keys.publicKey.substring(0, 20)}...`;
+
+      const tunnelCb = card.querySelector<HTMLInputElement>('input[data-field="fullTunnel"]')!;
+      tunnelCb.checked = peer.fullTunnel;
+
+      const natCb = card.querySelector<HTMLInputElement>('input[data-field="natGateway"]')!;
+      natCb.checked = peer.natGateway;
+
+      const natIfaceWrap = card.querySelector<HTMLElement>('.peer-card__nat-iface')!;
+      natIfaceWrap.classList.toggle('peer-card__nat-iface--hidden', !peer.natGateway);
+
+      const roleBtn = card.querySelector<HTMLElement>('.peer-card__role')!;
+      const role = network.topology === 'hybrid'
+        ? (peer.role === 'hub' ? 'SERVIDOR' : 'CLIENTE')
+        : peer.role.toUpperCase();
+      roleBtn.textContent = `[${role}]`;
+      roleBtn.dataset.role = peer.role;
+      roleBtn.setAttribute('aria-label', `${peer.name}: ${role}. Clique para alternar o papel.`);
+      roleBtn.classList.toggle('peer-card__role--hidden', network.topology === 'mesh');
+      card.querySelector('.peer-card__remove')!.setAttribute('aria-label', `Remover ${peer.name}`);
+      renderGateway(card, peer, peers, network);
     }
   }
 
@@ -230,8 +303,23 @@
     gap: 0.2rem;
   }
 
-  .peer-card__field input {
+  .peer-card__field input,
+  .peer-card__field select {
     width: 100%;
+    min-width: 0;
+  }
+
+  .peer-card__gateway {
+    margin-top: 0.75rem;
+  }
+
+  .peer-card__help {
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+  }
+
+  .peer-card__gateway select[aria-invalid="true"] {
+    border-color: var(--danger);
   }
 
   .peer-card__field--short {

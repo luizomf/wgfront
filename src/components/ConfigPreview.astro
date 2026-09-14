@@ -3,11 +3,15 @@
 
 <section class="section" id="config-preview-section" hidden>
   <h2 class="preview__title text-secondary">Preview da Configuração</h2>
+  <div class="preview__errors" id="routing-errors" role="alert" aria-atomic="true" hidden>
+    <p>Corrija o roteamento para visualizar, copiar ou baixar as configurações:</p>
+    <ul id="routing-issues"></ul>
+  </div>
   <div class="preview__tabs" id="preview-tabs"></div>
   <div class="preview__content" id="preview-content">
     <div class="preview__actions">
-      <button class="btn btn--sm" id="copy-current-btn">[COPIAR]</button>
-      <button class="btn btn--sm" id="download-current-btn">[BAIXAR]</button>
+      <button class="btn btn--sm" id="copy-current-btn" disabled>[COPIAR]</button>
+      <button class="btn btn--sm" id="download-current-btn" disabled>[BAIXAR]</button>
     </div>
     <pre class="preview__code" id="preview-code"></pre>
   </div>
@@ -27,6 +31,29 @@
     border-bottom: 1px solid var(--border);
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .preview__tabs[hidden],
+  .preview__content[hidden] {
+    display: none;
+  }
+
+  .preview__errors {
+    padding: 1rem;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+  }
+
+  .preview__errors ul {
+    padding-left: 1.5rem;
+    margin-top: 0.5rem;
+    overflow-wrap: anywhere;
+  }
+
+  .preview__actions button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .preview__tabs::-webkit-scrollbar {
@@ -108,16 +135,21 @@
   import { copyToClipboard } from '../lib/clipboard';
   import { downloadText } from '../lib/download';
   import type { GeneratedConfig } from '../lib/types';
+  import { validateRouting } from '../lib/routing';
 
   const section = document.getElementById('config-preview-section')!;
   const tabsEl = document.getElementById('preview-tabs')!;
   const codeEl = document.getElementById('preview-code')!;
-  const copyBtn = document.getElementById('copy-current-btn')!;
-  const dlBtn = document.getElementById('download-current-btn')!;
+  const contentEl = document.getElementById('preview-content')!;
+  const errorsEl = document.getElementById('routing-errors')!;
+  const issuesEl = document.getElementById('routing-issues')!;
+  const copyBtn = document.getElementById('copy-current-btn') as HTMLButtonElement;
+  const dlBtn = document.getElementById('download-current-btn') as HTMLButtonElement;
 
   let currentConfigs: GeneratedConfig[] = [];
   let keySummary = '';
   let activeTab = 0;
+  let revision = 0;
 
   function highlightConfig(text: string): string {
     return text
@@ -169,47 +201,91 @@
     });
   }
 
-  function renderCode(): void {
-    let content: string;
-    let filename: string;
-
-    if (activeTab < currentConfigs.length) {
-      content = currentConfigs[activeTab].content;
-      filename = currentConfigs[activeTab].filename;
-    } else {
-      content = keySummary;
-      filename = 'keys.txt';
-    }
-
-    codeEl.innerHTML = highlightConfig(content);
-
-    copyBtn.onclick = async () => {
-      const ok = await copyToClipboard(content);
-      copyBtn.textContent = ok ? '[COPIADO!]' : '[ERRO]';
-      setTimeout(() => (copyBtn.textContent = '[COPIAR]'), 1500);
-    };
-
-    dlBtn.onclick = () => downloadText(content, filename);
+  function currentFile(): { content: string; filename: string } | undefined {
+    if (currentConfigs.length === 0) return;
+    return currentConfigs[activeTab] ?? { content: keySummary, filename: 'keys.txt' };
   }
 
-  function update(): void {
+  function renderCode(): void {
+    codeEl.innerHTML = highlightConfig(currentFile()?.content ?? '');
+  }
+
+  function clearPreview(): void {
+    currentConfigs = [];
+    keySummary = '';
+    codeEl.textContent = '';
+    tabsEl.replaceChildren();
+    tabsEl.hidden = true;
+    contentEl.hidden = true;
+    copyBtn.disabled = true;
+    dlBtn.disabled = true;
+    copyBtn.textContent = '[COPIAR]';
+  }
+
+  function showIssues(messages: string[]): void {
+    issuesEl.replaceChildren(...messages.map((message) => {
+      const item = document.createElement('li');
+      item.textContent = message;
+      return item;
+    }));
+    errorsEl.hidden = false;
+  }
+
+  function update(): boolean {
+    revision++;
+    clearPreview();
+    errorsEl.hidden = true;
+    issuesEl.replaceChildren();
     const state = getState();
-    if (state.peers.length === 0) {
-      section.hidden = true;
-      return;
+    section.hidden = state.peers.length === 0;
+    if (section.hidden) return false;
+
+    try {
+      const issues = validateRouting(state.peers, state.network);
+      if (issues.length > 0) {
+        showIssues(issues.map((issue) => {
+          const peer = state.peers.find((candidate) => candidate.id === issue.peerId);
+          return `${peer?.name || 'Nó'} (#${issue.peerId}): ${issue.message}`;
+        }));
+        return false;
+      }
+      currentConfigs = generateAllConfigs(state.peers, state.network);
+      keySummary = generateKeySummary(state.peers, state.network);
+    } catch {
+      clearPreview();
+      showIssues(['Não foi possível gerar as configurações. Revise os nós e o roteamento.']);
+      return false;
     }
 
-    section.hidden = false;
-    currentConfigs = generateAllConfigs(state.peers, state.network);
-    keySummary = generateKeySummary(state.peers, state.network);
-
-    if (activeTab >= currentConfigs.length + 1) {
-      activeTab = 0;
-    }
-
+    if (activeTab >= currentConfigs.length + 1) activeTab = 0;
+    tabsEl.hidden = false;
+    contentEl.hidden = false;
+    copyBtn.disabled = false;
+    dlBtn.disabled = false;
     renderTabs();
     renderCode();
+    return true;
   }
+
+  // Always regenerate from current state; handlers never capture preview content.
+  copyBtn.addEventListener('click', async () => {
+    if (!update()) return;
+    const file = currentFile();
+    if (!file) return;
+    const copiedRevision = revision;
+    const ok = await copyToClipboard(file.content);
+    if (revision !== copiedRevision) return;
+    copyBtn.textContent = ok ? '[COPIADO!]' : '[ERRO]';
+    setTimeout(() => {
+      if (revision === copiedRevision) copyBtn.textContent = '[COPIAR]';
+    }, 1500);
+  });
+
+  dlBtn.addEventListener('click', () => {
+    if (!update()) return;
+    const file = currentFile();
+    if (file) downloadText(file.content, file.filename);
+  });
 
   subscribe(update);
   update();

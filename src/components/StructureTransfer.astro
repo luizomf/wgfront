@@ -1,0 +1,77 @@
+---
+---
+
+<section class="section structure" aria-label="Importar e exportar estrutura">
+  <div class="structure__actions">
+    <button class="btn" id="import-structure-btn">[IMPORTAR ESTRUTURA]</button>
+    <button class="btn" id="export-structure-btn" disabled>[EXPORTAR ESTRUTURA .json]</button>
+    <input id="structure-file" type="file" accept=".json,application/json" hidden />
+  </div>
+  <p class="text-secondary structure__help">
+    Salve os nós e o roteamento, sem chaves privadas ou públicas. Importar substitui
+    a estrutura atual e gera chaves novas para todos os nós. O JSON ainda contém
+    nomes e endereços da rede: compartilhe com cuidado.
+  </p>
+  <p id="structure-status" class="structure__help" role="status" aria-live="polite"></p>
+</section>
+
+<style>
+  .structure__actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .structure__help { margin-top: 0.75rem; font-size: 0.875rem; overflow-wrap: anywhere; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+</style>
+
+<script>
+  import { getState, importStructure, subscribe } from '../lib/store';
+  import { exportStructure, parseStructure, MAX_STRUCTURE_BYTES } from '../lib/structure';
+  import { downloadBlob } from '../lib/download';
+
+  const importBtn = document.getElementById('import-structure-btn') as HTMLButtonElement;
+  const exportBtn = document.getElementById('export-structure-btn') as HTMLButtonElement;
+  const fileInput = document.getElementById('structure-file') as HTMLInputElement;
+  const status = document.getElementById('structure-status')!;
+  let busy = false;
+
+  function render(): void {
+    importBtn.disabled = busy;
+    exportBtn.disabled = busy || getState().peers.length === 0;
+  }
+
+  function reportError(error: unknown): void {
+    status.textContent = error instanceof Error ? error.message : 'Não foi possível processar a estrutura.';
+  }
+
+  exportBtn.addEventListener('click', () => {
+    try {
+      const { network, peers } = getState();
+      const json = exportStructure(network, peers);
+      downloadBlob(new Blob([json], { type: 'application/json' }), 'wireguard-structure.json');
+      status.textContent = 'Estrutura exportada sem chaves WireGuard.';
+    } catch (error) { reportError(error); }
+  });
+
+  importBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = '';
+    if (!file || busy) return;
+    busy = true;
+    render();
+    try {
+      if (file.size > MAX_STRUCTURE_BYTES) throw new Error('O arquivo deve ter no máximo 1 MB.');
+      const json = await file.text();
+      parseStructure(json);
+      if (getState().peers.length > 0 && !confirm('Substituir todos os nós da tela? A importação gera chaves novas. Exporte a estrutura atual antes, se quiser preservá-la.')) {
+        status.textContent = 'Importação cancelada. A estrutura atual foi preservada.';
+        return;
+      }
+      status.textContent = 'Importando estrutura e gerando chaves novas…';
+      await importStructure(json);
+      status.textContent = 'Estrutura importada com chaves novas. Ao aplicar a rotação, atualize também as chaves públicas nos peers das outras máquinas.';
+    } catch (error) { reportError(error); }
+    finally { busy = false; render(); }
+  });
+
+  subscribe(render);
+  render();
+</script>

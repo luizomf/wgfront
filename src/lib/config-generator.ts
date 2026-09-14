@@ -1,4 +1,5 @@
-import type { Peer, NetworkConfig, GeneratedConfig, Topology } from './types';
+import type { Peer, NetworkConfig, GeneratedConfig } from './types';
+import { planPeerRoutes } from './routing';
 
 function peerWgIp(subnet: string, octet: number): string {
   return `${subnet}.${octet}`;
@@ -12,33 +13,20 @@ function peerEndpoint(peer: Peer): string {
   return peer.publicEndpointIp || peer.lanIp;
 }
 
-interface PeerBlockOptions {
-  useFullTunnel: boolean;
-  useSubnetRoute: boolean;
-}
-
 function buildPeerBlock(
   peer: Peer,
   network: NetworkConfig,
-  options: PeerBlockOptions,
+  allowedIPs: string[],
 ): string {
   const wgIp = peerWgIp(network.subnet, peer.wgOctet);
   const endpoint = peerEndpoint(peer);
   const lines: string[] = [];
 
-  const wgIp6 = peerWgIp6(peer.wgOctet);
-
   lines.push(`# ${peer.label} - ${endpoint}:${network.port} -> ${wgIp}/32`);
   lines.push('[Peer]');
   lines.push(`PublicKey = ${peer.keys.publicKey}`);
 
-  if (options.useFullTunnel) {
-    lines.push('AllowedIPs = 0.0.0.0/0, ::/0');
-  } else if (options.useSubnetRoute) {
-    lines.push(`AllowedIPs = ${network.subnet}.0/24, fd10:100::/64`);
-  } else {
-    lines.push(`AllowedIPs = ${wgIp}/32, ${wgIp6}/128`);
-  }
+  lines.push(`AllowedIPs = ${allowedIPs.join(', ')}`);
 
   if (peer.publicEndpointIp) {
     lines.push(`Endpoint = ${peer.publicEndpointIp}:${network.port}`);
@@ -50,25 +38,12 @@ function buildPeerBlock(
   return lines.join('\n');
 }
 
-function peersForNode(
-  self: Peer,
-  allPeers: Peer[],
-  topology: Topology,
-): Peer[] {
-  return allPeers.filter((peer) => {
-    if (peer.id === self.id) return false;
-    if (topology === 'mesh') return true;
-    // hub-spoke: hubs see everyone, spokes see only hubs
-    if (self.role === 'hub') return true;
-    return peer.role === 'hub';
-  });
-}
-
 export function generateConfig(
   self: Peer,
   allPeers: Peer[],
   network: NetworkConfig,
 ): string {
+  const routes = planPeerRoutes(self, allPeers, network);
   const selfWgIp = peerWgIp(network.subnet, self.wgOctet);
   const lines: string[] = [];
 
@@ -110,22 +85,8 @@ export function generateConfig(
 
   lines.push('');
 
-  const visiblePeers = peersForNode(self, allPeers, network.topology);
-
-  const isSpoke = network.topology === 'hub-spoke' && self.role === 'spoke';
-
-  // Full tunnel: route 0.0.0.0/0 through the NAT gateway peer (or first peer as fallback)
-  const fullTunnelTarget = self.fullTunnel
-    ? visiblePeers.find((p) => p.natGateway)?.id ?? visiblePeers[0]?.id
-    : null;
-
-  for (const peer of visiblePeers) {
-    const useFullTunnel = peer.id === fullTunnelTarget;
-
-    // Spokes route the entire WG subnet through hubs
-    const useSubnetRoute = isSpoke && peer.role === 'hub' && !useFullTunnel;
-
-    lines.push(buildPeerBlock(peer, network, { useFullTunnel, useSubnetRoute }));
+  for (const { peer, allowedIPs } of routes) {
+    lines.push(buildPeerBlock(peer, network, allowedIPs));
   }
 
   return lines.join('\n');
