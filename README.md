@@ -15,6 +15,7 @@ No server. No tracking. Just math.
 - **Full tunnel** — route internet traffic through the selected gateway with `AllowedIPs = 0.0.0.0/0, ::/0`, keeping direct peers on host routes
 - **Routing validation** — invalid gateway selections and circular internet exits block config preview and export
 - **Structure import/export** — versioned JSON containing nodes and routing settings, never keys; import generates fresh keys for rotation
+- **One-click example** — load a fictitious, fully populated network with fresh keys to explore routing and exports
 - **Dual-stack IPv6** — ULA addresses (`fd10:100::X`) alongside IPv4
 - **Live config preview** with syntax highlighting
 - **Download all** as `.zip` or copy individual configs
@@ -71,6 +72,34 @@ X25519 key generation requires:
 3. Select a default gateway (or a per-node override) for hub-spoke subnet routing or **full tunnel**
 4. Keys are generated client-side via `crypto.subtle.generateKey({ name: 'X25519' })`
 5. Download configs and deploy to your machines with `wg-quick`
+
+## Try a Fictitious Network
+
+Click **Load Example** at the top of the page. It creates six nodes in hybrid mode:
+
+| Node | Purpose |
+|------|---------|
+| `exit-primary` | Default internet gateway with NAT on `ens3` |
+| `exit-alternative` | Second NAT exit on `eth0`, explicitly selected by the phone; not automatic failover |
+| `services-vps` | Directly connected server without NAT |
+| `laptop` | LAN client using full tunnel through the network's default gateway |
+| `phone` | Roaming client using full tunnel through its per-node gateway override |
+| `workstation` | LAN client using split tunnel, with direct server routes only |
+
+The example covers node fields, server/client roles, IPv4/IPv6 output, full and
+split tunnels, NAT interfaces, and default/overridden gateways. Switch to
+hub-spoke or mesh to compare generated configs, or export the example as a
+key-free JSON structure to edit and import later.
+
+Public endpoints use documentation-only TEST-NET ranges (`192.0.2.0/24`,
+`198.51.100.0/24`, `203.0.113.0/24`); they are **not working VPN servers**.
+Replace addresses and interfaces and verify reachability/firewall rules before
+using generated configs. Private LAN addresses are illustrative too.
+
+Every click generates new keys in your browser. Existing nodes are replaced only
+after confirmation; cancellation or generation failure preserves the current
+network. The example is never loaded automatically and contains no owner's
+hosts, real endpoints, or embedded key material.
 
 ## Save a Structure for Key Rotation
 

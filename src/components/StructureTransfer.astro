@@ -3,6 +3,7 @@
 
 <section class="section structure" aria-label="Importar e exportar estrutura">
   <div class="structure__actions">
+    <button class="btn btn--accent" id="load-example-btn" aria-describedby="example-help">[CARREGAR EXEMPLO]</button>
     <button class="btn" id="import-structure-btn">[IMPORTAR ESTRUTURA]</button>
     <button class="btn" id="export-structure-btn" disabled>[EXPORTAR ESTRUTURA .json]</button>
     <input id="structure-file" type="file" accept=".json,application/json" hidden />
@@ -12,6 +13,17 @@
     a estrutura atual e gera chaves novas para todos os nós. O JSON ainda contém
     nomes e endereços da rede: compartilhe com cuidado.
   </p>
+  <details class="structure__help">
+    <summary>Como funciona o exemplo fictício?</summary>
+    <p id="example-help">
+      Três servidores conectados entre si e três clientes: laptop com Full Tunnel
+      pelo gateway padrão, celular com saída própria e workstation com Split Tunnel.
+      Você pode alternar entre hybrid, hub-spoke e mesh, comparar as configs e
+      exportar a estrutura. Os IPs públicos são reservados para documentação e
+      não funcionam na internet: ajuste endereços e interfaces antes de usar.
+      A saída alternativa não faz failover automático.
+    </p>
+  </details>
   <p id="structure-status" class="structure__help" role="status" aria-live="polite"></p>
 </section>
 
@@ -25,7 +37,9 @@
   import { getState, importStructure, subscribe } from '../lib/store';
   import { exportStructure, parseStructure, MAX_STRUCTURE_BYTES } from '../lib/structure';
   import { downloadBlob } from '../lib/download';
+  import { EXAMPLE_STRUCTURE_JSON } from '../lib/example-structure';
 
+  const exampleBtn = document.getElementById('load-example-btn') as HTMLButtonElement;
   const importBtn = document.getElementById('import-structure-btn') as HTMLButtonElement;
   const exportBtn = document.getElementById('export-structure-btn') as HTMLButtonElement;
   const fileInput = document.getElementById('structure-file') as HTMLInputElement;
@@ -33,6 +47,7 @@
   let busy = false;
 
   function render(): void {
+    exampleBtn.disabled = busy;
     importBtn.disabled = busy;
     exportBtn.disabled = busy || getState().peers.length === 0;
   }
@@ -48,6 +63,22 @@
       downloadBlob(new Blob([json], { type: 'application/json' }), 'wireguard-structure.json');
       status.textContent = 'Estrutura exportada sem chaves WireGuard.';
     } catch (error) { reportError(error); }
+  });
+
+  exampleBtn.addEventListener('click', async () => {
+    if (busy) return;
+    if (getState().peers.length > 0 && !confirm('Substituir todos os nós pelo exemplo fictício? Serão geradas chaves novas. Exporte a estrutura atual antes, se quiser preservá-la.')) {
+      status.textContent = 'Exemplo cancelado. A estrutura atual foi preservada.';
+      return;
+    }
+    busy = true;
+    render();
+    try {
+      status.textContent = 'Carregando exemplo e gerando chaves novas…';
+      await importStructure(EXAMPLE_STRUCTURE_JSON);
+      status.textContent = 'Exemplo híbrido carregado com chaves novas: 3 servidores e 3 clientes. Os IPs públicos são fictícios; ajuste endereços e interfaces antes de usar.';
+    } catch (error) { reportError(error); }
+    finally { busy = false; render(); }
   });
 
   importBtn.addEventListener('click', () => fileInput.click());
