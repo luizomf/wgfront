@@ -3,7 +3,7 @@ export interface KeyPair {
   publicKey: string;
 }
 
-export type Topology = 'mesh' | 'hub-spoke';
+export type Topology = 'mesh' | 'hub-spoke' | 'hybrid';
 export type PeerRole = 'hub' | 'spoke';
 
 export interface Peer {
@@ -16,6 +16,7 @@ export interface Peer {
   keys: KeyPair;
   role: PeerRole;
   fullTunnel: boolean;
+  gatewayId: string;
   natGateway: boolean;
   natInterface: string;
 }
@@ -25,6 +26,7 @@ export interface NetworkConfig {
   port: number;
   keepalive: number;
   topology: Topology;
+  gatewayId: string;
 }
 
 export interface GeneratedConfig {

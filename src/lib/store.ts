@@ -13,6 +13,7 @@ const DEFAULT_NETWORK: NetworkConfig = {
   port: 51820,
   keepalive: 25,
   topology: 'mesh',
+  gatewayId: '',
 };
 
 let state: AppState = {
@@ -63,6 +64,7 @@ export async function addPeer(): Promise<void> {
     keys,
     role: state.peers.length === 0 ? 'hub' : 'spoke',
     fullTunnel: false,
+    gatewayId: '',
     natGateway: false,
     natInterface: 'eth0',
   };

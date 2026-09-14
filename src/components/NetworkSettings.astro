@@ -21,12 +21,26 @@
     </div>
     <div class="net__field">
       <label for="topology">--topology</label>
-      <select id="topology">
+      <select id="topology" aria-describedby="topology-help">
         <option value="mesh" selected>mesh</option>
         <option value="hub-spoke">hub-spoke</option>
+        <option value="hybrid">hybrid</option>
+      </select>
+    </div>
+    <div class="net__field">
+      <label for="network-gateway">Gateway padrão</label>
+      <select id="network-gateway" aria-describedby="gateway-help">
+        <option value="">Não selecionado</option>
       </select>
     </div>
   </div>
+  <p class="net__help text-secondary" id="topology-help"></p>
+  <p class="net__help text-secondary" id="gateway-help">
+    Full Tunnel exige um gateway explícito em qualquer topologia: ele recebe as
+    rotas /0; os demais pares diretos, /32 e /128. Cada nó pode substituir o padrão.
+    NAT Gateway gera regras de firewall, não escolhe rotas;
+    o gateway também pode usar um firewall configurado externamente.
+  </p>
 </section>
 
 <style>
@@ -51,13 +65,20 @@
     min-width: 140px;
   }
 
-  .net__field input {
+  .net__field input,
+  .net__field select {
     width: 100%;
+    min-width: 0;
+  }
+
+  .net__help {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
   }
 </style>
 
 <script>
-  import { updateNetwork, getState } from '../lib/store';
+  import { updateNetwork, getState, subscribe } from '../lib/store';
   import type { Topology } from '../lib/types';
 
   const subnetInput = document.getElementById('subnet') as HTMLInputElement;
@@ -68,6 +89,51 @@
   const topologySelect = document.getElementById(
     'topology',
   ) as HTMLSelectElement;
+
+  const gatewaySelect = document.getElementById('network-gateway') as HTMLSelectElement;
+  const topologyHelp = document.getElementById('topology-help')!;
+  const topologyDescriptions: Record<Topology, string> = {
+    mesh: 'Mesh: todos os nós se conectam diretamente. Papéis são ignorados; em Split Tunnel, apenas rotas de host (/32 e /128).',
+    'hub-spoke': 'Hub-spoke: hubs se conectam a todos; spokes, apenas aos hubs. Em Split Tunnel, cada spoke precisa de um gateway hub explícito: só ele recebe a sub-rede WireGuard; os demais hubs recebem rotas de host.',
+    hybrid: 'Hybrid: servidores se conectam a todos; clientes, apenas aos servidores. Em Split Tunnel, apenas rotas de host (/32 e /128), sem retransmissão WireGuard entre clientes. Gateway só é obrigatório em Full Tunnel.',
+  };
+  let gatewayOptionsKey = '';
+
+  function render(): void {
+    const { peers, network } = getState();
+    topologySelect.value = network.topology;
+    topologyHelp.textContent = topologyDescriptions[network.topology];
+
+    const options = [
+      { value: '', label: 'Não selecionado', disabled: false },
+      ...peers.map((peer) => ({
+        value: peer.id,
+        label: `${peer.name || 'Sem nome'} (#${peer.id})`,
+        disabled: false,
+      })),
+    ];
+    if (network.gatewayId && !peers.some((peer) => peer.id === network.gatewayId)) {
+      options.push({
+        value: network.gatewayId,
+        label: `Nó removido (#${network.gatewayId}) — selecione outro`,
+        disabled: true,
+      });
+    }
+    const optionsKey = JSON.stringify(options);
+    if (optionsKey !== gatewayOptionsKey) {
+      gatewaySelect.replaceChildren(...options.map(({ value, label, disabled }) => {
+        const option = new Option(label, value);
+        option.disabled = disabled;
+        return option;
+      }));
+      gatewayOptionsKey = optionsKey;
+    }
+    gatewaySelect.value = network.gatewayId;
+  }
+
+  gatewaySelect.addEventListener('change', () => {
+    updateNetwork({ gatewayId: gatewaySelect.value });
+  });
 
   subnetInput.addEventListener('input', () => {
     updateNetwork({ subnet: subnetInput.value });
@@ -86,4 +152,7 @@
   topologySelect.addEventListener('change', () => {
     updateNetwork({ topology: topologySelect.value as Topology });
   });
+
+  subscribe(render);
+  render();
 </script>
