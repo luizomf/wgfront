@@ -14,6 +14,7 @@ No server. No tracking. Just math.
 - **Explicit gateway selection** — network default with per-node overrides; no first-peer or NAT-checkbox fallback
 - **Full tunnel** — route internet traffic through the selected gateway with `AllowedIPs = 0.0.0.0/0, ::/0`, keeping direct peers on host routes
 - **Routing validation** — invalid gateway selections and circular internet exits block config preview and export
+- **Structure import/export** — versioned JSON containing nodes and routing settings, never keys; import generates fresh keys for rotation
 - **Dual-stack IPv6** — ULA addresses (`fd10:100::X`) alongside IPv4
 - **Live config preview** with syntax highlighting
 - **Download all** as `.zip` or copy individual configs
@@ -46,13 +47,14 @@ Browser regression tests (isolated test browser, not your personal profile):
 
 ```bash
 npx playwright install chromium  # one-time browser setup
-npm run test:e2e                 # starts/stops a local server on 127.0.0.1:4322
+npm run test:e2e                 # builds and tests the static site on 127.0.0.1:4322
 # Or use an already-installed Google Chrome:
 PLAYWRIGHT_CHANNEL=chrome npm run test:e2e
 ```
 
-The browser suite covers hybrid peers, ZIP contents, gateway overrides/removal,
-role/topology changes, stale export protection, and mobile layout.
+The browser suite serves the production build (no dev-server hot reload) and
+covers hybrid peers, ZIP contents, gateway overrides/removal, role/topology
+changes, stale export protection, structure round-trips, and mobile layout.
 
 ## Browser Support
 
@@ -69,6 +71,23 @@ X25519 key generation requires:
 3. Select a default gateway (or a per-node override) for hub-spoke subnet routing or **full tunnel**
 4. Keys are generated client-side via `crypto.subtle.generateKey({ name: 'X25519' })`
 5. Download configs and deploy to your machines with `wg-quick`
+
+## Save a Structure for Key Rotation
+
+Use **Export Structure** to save `wireguard-structure.json`. It contains node
+names, addresses, roles, gateway choices, and network settings, but **no private
+or public keys**. You can save unfinished gateway selections as a draft even
+when config export is blocked.
+
+Later, use **Import Structure** (available even in an empty editor). It validates
+the file, asks before replacing existing nodes, and generates fresh keys for
+every imported node. Then download the new configs and update the matching
+public keys on all affected machines. Exporting the JSON does not rotate keys.
+
+The [version 1 format reference](docs/structure-format.md) includes an example and
+field constraints for tools or infrastructure agents. This is a network blueprint,
+not an executable deployment plan. Share carefully: it still contains hostnames,
+IP addresses, and topology. It is not a backup of your current cryptographic keys.
 
 ## Hybrid Example
 

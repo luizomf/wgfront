@@ -101,6 +101,9 @@
 
   function render(): void {
     const { peers, network } = getState();
+    if (subnetInput !== document.activeElement) subnetInput.value = network.subnet;
+    if (portInput !== document.activeElement) portInput.value = String(network.port);
+    if (keepaliveInput !== document.activeElement) keepaliveInput.value = String(network.keepalive);
     topologySelect.value = network.topology;
     topologyHelp.textContent = topologyDescriptions[network.topology];
 

@@ -57,9 +57,14 @@
   addBtn.addEventListener('click', async () => {
     addBtn.setAttribute('disabled', '');
     addBtn.textContent = '[GERANDO...]';
-    await addPeer();
-    addBtn.removeAttribute('disabled');
-    addBtn.textContent = '[+ ADICIONAR NÓ]';
+    try {
+      await addPeer();
+      addBtn.textContent = '[+ ADICIONAR NÓ]';
+    } catch {
+      addBtn.textContent = '[ERRO — TENTAR ADICIONAR]';
+    } finally {
+      addBtn.removeAttribute('disabled');
+    }
   });
 
   function createPeerCard(peer: Peer): HTMLElement {
@@ -231,11 +236,18 @@
       }
     });
 
-    for (const peer of peers) {
+    for (const [index, peer] of peers.entries()) {
       const card = existingIds.has(peer.id)
         ? container.querySelector<HTMLElement>(`[data-peer-id="${peer.id}"]`)!
         : createPeerCard(peer);
-      if (!existingIds.has(peer.id)) container.appendChild(card);
+      if (container.children[index] !== card) {
+        container.insertBefore(card, container.children[index] ?? null);
+      }
+
+      for (const field of ['name', 'label', 'lanIp', 'publicEndpointIp', 'wgOctet', 'natInterface'] as const) {
+        const input = card.querySelector<HTMLInputElement>(`[data-field="${field}"]`)!;
+        if (input !== document.activeElement) input.value = String(peer[field]);
+      }
 
       const keyEl = card.querySelector('.peer-card__key')!;
       keyEl.textContent = `pubkey: ${peer.keys.publicKey.substring(0, 20)}...`;
