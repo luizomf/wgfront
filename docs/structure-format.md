@@ -1,4 +1,4 @@
-# WireGuard structure format (version 1)
+# WireGuard structure format (version 2)
 
 A structure file describes the editor's nodes and routing choices. It is not a
 WireGuard `.conf`, a key backup, or a deployment script. It can be shared with an
@@ -8,8 +8,9 @@ infrastructure agent as input, subject to the privacy warning below.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "network": {
+    "dns": "1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001",
     "subnet": "10.100.0",
     "port": 51820,
     "keepalive": 25,
@@ -26,6 +27,7 @@ infrastructure agent as input, subject to the privacy warning below.
       "wgOctet": 8,
       "role": "hub",
       "fullTunnel": false,
+      "dns": null,
       "gatewayId": "",
       "natGateway": true,
       "natInterface": "eth0"
@@ -39,6 +41,7 @@ infrastructure agent as input, subject to the privacy warning below.
       "wgOctet": 108,
       "role": "spoke",
       "fullTunnel": true,
+      "dns": null,
       "gatewayId": "",
       "natGateway": false,
       "natInterface": "eth0"
@@ -56,7 +59,11 @@ All illustrated fields are required. Unknown fields, including `keys`,
 `privateKey`, `publicKey`, preshared keys, and executable hooks, are rejected.
 Export uses an explicit allowlist: cryptographic keys are never included.
 
-- `version`: integer `1`. Other versions are rejected, not guessed or migrated.
+- `version`: integer `2` for new exports. Version `1` imports are migrated as
+  described below; other versions are rejected.
+- `network.dns`: default resolvers as a string, up to 1024 characters. Comma- or
+  space-separated IPv4/IPv6 literals, or `""` to omit DNS. No hostnames, ports,
+  scoped IPv6 addresses, CIDRs, search domains, or DoH URLs.
 - `network.subnet`: three valid IPv4 octets, e.g. `10.100.0`. WG addresses are
   `<subnet>.<wgOctet>/24` and `fd10:100::<wgOctet>/64`, matching the generator.
 - `network.port`: integer 1–65535, shared across nodes.
@@ -78,6 +85,11 @@ Export uses an explicit allowlist: cryptographic keys are never included.
   roles. Server/hub nodes connect to everyone; clients/spokes connect to hubs only.
 - `fullTunnel`: boolean. Requires an explicit reachable gateway; puts default
   routes on it and host routes on other direct peers.
+- `dns`: `null` inherits `network.dns` only when `fullTunnel` is true; split-tunnel
+  nodes inherit no DNS. A nonempty string is an explicit resolver override in
+  either tunnel mode, using the same syntax and length limit as `network.dns`.
+  `""` explicitly omits the `DNS =` line, keeping system DNS settings. This does
+  not change routes or configure a DNS server; verify resolver reachability.
 - `gatewayId`: per-node override, or `""` to inherit `network.gatewayId`.
 - `natGateway`: boolean. Generates Linux forwarding/NAT hooks; does not select
   anyone's gateway or grant permission to configure a real machine.
@@ -88,6 +100,16 @@ Strings cannot contain ASCII control characters. Input is limited to 1 MB.
 Dangling or missing gateway references are permitted as unfinished drafts, but
 config preview/download remain blocked until routing is valid. See the
 [README routing table](../README.md#connections-versus-routing) for semantics.
+
+## Version 1 compatibility
+
+Version 1 has the same fields except `network.dns` and each node's `dns`, which
+must be absent. Import supplies the original default
+`1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001` and sets every
+node's `dns` to `null`. This preserves the original behavior: full-tunnel nodes
+receive that exact DNS line; split-tunnel nodes receive none. All other settings
+are preserved. Subsequent exports use version 2. Old generators that only support
+version 1 cannot import version 2 files.
 
 ## Import and key rotation
 

@@ -149,7 +149,7 @@ test('gateway labels update without losing focus and mobile controls fit the vie
   await name.fill('exit-server');
   await expect(name).toBeFocused();
   await expect(page.locator('#network-gateway option:checked')).toContainText('exit-server');
-  await expect(page.locator('[data-peer-id="4"] .peer-card__help')).toContainText('exit-server');
+  await expect(page.locator('#peer-gateway-help-4')).toContainText('exit-server');
   const dimensions = await page.evaluate(() => ({
     width: window.innerWidth,
     content: document.documentElement.scrollWidth,

@@ -1,17 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { getGatewayCandidates, planPeerRoutes, validateRouting } from '../routing';
 import type { NetworkConfig, Peer, Topology } from '../types';
+import { DEFAULT_DNS } from '../dns';
 
 function peer(id: string, overrides: Partial<Peer> = {}): Peer {
   return {
     id, name: id, label: id, lanIp: '', publicEndpointIp: '', wgOctet: Number(id),
     keys: { privateKey: 'test-private', publicKey: `test-public-${id}` },
-    role: 'hub', gatewayId: '', fullTunnel: false, natGateway: false, natInterface: 'eth0',
+    role: 'hub', gatewayId: '', fullTunnel: false, dns: null, natGateway: false, natInterface: 'eth0',
     ...overrides,
   };
 }
 
 const network: NetworkConfig = {
+  dns: DEFAULT_DNS,
   topology: 'hybrid', subnet: '10.100.0', port: 51820, keepalive: 25, gatewayId: '8',
 };
 const hub = peer('8');

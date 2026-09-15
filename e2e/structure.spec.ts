@@ -43,7 +43,7 @@ test('exports settings only and imports them into both populated and fresh edito
   const before = await page.locator('#preview-code').textContent();
   const saved = await save(page);
   const structure = JSON.parse(saved.toString());
-  expect(structure.version).toBe(1);
+  expect(structure.version).toBe(2);
   expect(structure.peers).toHaveLength(2);
   expect(saved.toString()).not.toMatch(/privateKey|publicKey|"keys"/);
   const oldPrivateKey = before!.match(/^PrivateKey = (.+)$/m)![1];

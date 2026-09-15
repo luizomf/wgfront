@@ -13,7 +13,8 @@ No server. No tracking. Just math.
 - **Hybrid topology** — servers mesh with each other; clients connect to every server, never directly to each other
 - **Explicit gateway selection** — network default with per-node overrides; no first-peer or NAT-checkbox fallback
 - **Full tunnel** — route internet traffic through the selected gateway with `AllowedIPs = 0.0.0.0/0, ::/0`, keeping direct peers on host routes
-- **Routing validation** — invalid gateway selections and circular internet exits block config preview and export
+- **Configurable DNS** — keep the existing full-tunnel defaults, choose network-wide IPv4/IPv6 resolvers, or override/omit DNS per node
+- **Routing validation** — invalid gateway selections, circular internet exits, and invalid effective DNS block config preview and export
 - **Structure import/export** — versioned JSON containing nodes and routing settings, never keys; import generates fresh keys for rotation
 - **One-click example** — load a fictitious, fully populated network with fresh keys to explore routing and exports
 - **Dual-stack IPv6** — ULA addresses (`fd10:100::X`) alongside IPv4
@@ -113,10 +114,27 @@ the file, asks before replacing existing nodes, and generates fresh keys for
 every imported node. Then download the new configs and update the matching
 public keys on all affected machines. Exporting the JSON does not rotate keys.
 
-The [version 1 format reference](docs/structure-format.md) includes an example and
+The [version 2 format reference](docs/structure-format.md) includes an example and
 field constraints for tools or infrastructure agents. This is a network blueprint,
 not an executable deployment plan. Share carefully: it still contains hostnames,
 IP addresses, and topology. It is not a backup of your current cryptographic keys.
+
+## DNS
+
+The default stays exactly as before: `1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001`.
+Nodes inherit it only with **Full Tunnel** enabled. Existing split-tunnel configs
+still have no `DNS =` line. Nothing changes unless you edit the DNS settings.
+
+Edit the network DNS to change that default. For a specific node, uncheck DNS
+inheritance and enter its own resolvers, or leave it empty to omit `DNS =` and
+keep system DNS settings. Explicit overrides work in both full and split tunnel.
+Use comma- or space-separated IPv4/IPv6 addresses, without ports, hostnames,
+search domains, or DoH URLs. The tool validates syntax locally, not reachability.
+It does not install a DNS server or add routes to reach your chosen resolvers;
+check their reachability and the routes they will use, especially in split tunnel.
+
+Structure exports now use version 2 and retain these choices without keys.
+Version 1 files still import with the exact original DNS defaults and behavior.
 
 ## Hybrid Example
 
@@ -156,7 +174,8 @@ src/
   lib/              Pure TypeScript logic
     crypto.ts         X25519 key generation
     config-generator  Config string builder
-    routing.ts        Direct peer selection, route ownership, and gateway validation
+    routing.ts        Direct peer selection, route ownership, and config validation
+    dns.ts            DNS inheritance and literal resolver validation
     store.ts          Observable state (pub/sub)
     validators.ts     Input validation
     zip.ts            ZIP download via fflate
