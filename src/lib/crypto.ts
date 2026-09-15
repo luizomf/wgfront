@@ -8,6 +8,12 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+export function generatePresharedKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  if (!bytes.some((byte) => byte !== 0)) throw new Error('Não foi possível gerar uma PSK segura. Tente novamente.');
+  return toBase64(bytes);
+}
+
 export async function generateKeyPair(): Promise<KeyPair> {
   const keyPair = await crypto.subtle.generateKey(
     { name: 'X25519' },

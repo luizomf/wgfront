@@ -131,13 +131,13 @@ test('malformed live edits retain focus and block all stale previews and exports
   await expect(page.locator('#preview-code')).toHaveText(before);
 });
 
-test('strict v3 round-trip reconciles same IDs, replaces malformed edits, and rotates keys atomically', async ({ page }) => {
+test('strict v4 round-trip reconciles same IDs, replaces malformed edits, and rotates keys atomically', async ({ page }) => {
   await load(page);
   await page.locator('#peer-mtu-example-exit').fill('1280');
   await page.locator('#peer-mtu-example-laptop').fill('65535');
   const before = await configs(page);
   const saved = JSON.parse((await download(page, '#export-structure-btn')).toString());
-  expect(saved.version).toBe(3);
+  expect(saved.version).toBe(4);
   expect(saved.peers.map((peer: { mtu: number | null }) => peer.mtu)).toEqual([1280, null, null, 65535, null, null]);
   expect(JSON.stringify(saved)).not.toMatch(/privateKey|publicKey|"keys"/);
   for (const mtu of [1279, 65536, 1420.5, '1420', true, 'bad', undefined]) {
@@ -170,11 +170,12 @@ test('strict v3 round-trip reconciles same IDs, replaces malformed edits, and ro
 });
 
 for (const version of [1, 2]) {
-  test(`legacy v${version} imports automatic MTU with historical DNS compatibility and reexports v3`, async ({ page }) => {
+  test(`legacy v${version} imports automatic MTU with historical DNS compatibility and reexports v4`, async ({ page }) => {
     await load(page);
     await page.locator('#peer-mtu-example-laptop').fill('1420');
     const legacy = JSON.parse(EXAMPLE_STRUCTURE_JSON);
     legacy.version = version;
+    delete legacy.network.usePsk;
     legacy.network.dns = '9.9.9.9';
     legacy.peers[4].dns = '';
     legacy.peers[5].dns = '10.42.0.3';
@@ -198,7 +199,7 @@ for (const version of [1, 2]) {
       expect(files['workstation.conf']).toContain('DNS = 10.42.0.3');
     }
     const saved = JSON.parse((await download(page, '#export-structure-btn')).toString());
-    expect(saved.version).toBe(3);
+    expect(saved.version).toBe(4);
     expect(saved.peers.every((peer: { mtu: number | null }) => peer.mtu === null)).toBe(true);
     page.once('dialog', (dialog) => dialog.accept());
     await importJson(page, saved);

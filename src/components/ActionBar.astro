@@ -36,6 +36,7 @@
   import { copyToClipboard } from '../lib/clipboard';
   import { downloadZip } from '../lib/zip';
   import { validateRouting } from '../lib/routing';
+  import { validatePairKeys } from '../lib/psk';
 
   const section = document.getElementById('action-bar')!;
   const regenBtn = document.getElementById('regen-keys-btn')!;
@@ -44,8 +45,11 @@
   let revision = 0;
 
   function canExport(): boolean {
-    const { peers, network } = getState();
-    return peers.length > 0 && validateRouting(peers, network).length === 0;
+    const { peers, network, pairKeys } = getState();
+    try {
+      validatePairKeys(peers, network, pairKeys);
+      return peers.length > 0 && validateRouting(peers, network).length === 0;
+    } catch { return false; }
   }
 
   function update(): void {
@@ -85,7 +89,7 @@
     }
     const state = getState();
     try {
-      const configs = generateAllConfigs(state.peers, state.network);
+      const configs = generateAllConfigs(state.peers, state.network, state.pairKeys);
       const keys = generateKeySummary(state.peers, state.network);
       const entries = [
         ...configs.map((c) => ({ filename: c.filename, content: c.content })),
@@ -105,7 +109,7 @@
     const state = getState();
     const copiedRevision = revision;
     try {
-      const configs = generateAllConfigs(state.peers, state.network);
+      const configs = generateAllConfigs(state.peers, state.network, state.pairKeys);
       const allText = configs.map((c) => `# --- ${c.filename} ---\n${c.content}`).join('\n\n');
       const ok = await copyToClipboard(allText);
       if (revision !== copiedRevision) return;

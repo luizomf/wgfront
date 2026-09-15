@@ -103,7 +103,7 @@ test('round-trips DNS choices through existing node IDs and loads old version 1 
   await phone.locator('[data-field="inheritDns"]').uncheck();
   await phone.locator('[data-field="dns"]').fill('');
   const json = await exportJson(page);
-  expect(JSON.parse(json).version).toBe(3);
+  expect(JSON.parse(json).version).toBe(4);
   expect(json).not.toMatch(/"keys"|privateKey|publicKey/);
   await page.locator('#network-dns').fill(DEFAULT_DNS);
   await laptop.locator('[data-field="inheritDns"]').check();
@@ -119,6 +119,7 @@ test('round-trips DNS choices through existing node IDs and loads old version 1 
 
   const legacy = JSON.parse(EXAMPLE_STRUCTURE_JSON);
   legacy.version = 1;
+  delete legacy.network.usePsk;
   delete legacy.network.dns;
   legacy.peers.forEach((peer: { dns?: string | null; mtu?: number | null }) => { delete peer.dns; delete peer.mtu; });
   page.once('dialog', (dialog) => dialog.accept());

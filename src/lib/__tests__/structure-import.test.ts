@@ -3,7 +3,9 @@ import { exportStructure } from '../structure';
 import type { KeyPair } from '../types';
 
 const { generateKeyPair } = vi.hoisted(() => ({ generateKeyPair: vi.fn() }));
-vi.mock('../crypto', () => ({ generateKeyPair }));
+vi.mock('../crypto', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../crypto')>(), generateKeyPair,
+}));
 
 beforeEach(() => {
   vi.resetModules();

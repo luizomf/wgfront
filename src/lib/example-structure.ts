@@ -2,8 +2,9 @@ import type { NetworkStructure } from './structure';
 import { DEFAULT_DNS } from './dns';
 
 const example: NetworkStructure = {
-  version: 3,
+  version: 4,
   network: {
+    usePsk: false,
     dns: DEFAULT_DNS,
     subnet: '10.42.0',
     port: 51820,

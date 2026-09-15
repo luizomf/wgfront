@@ -13,6 +13,7 @@ function peer(id: string, overrides: Partial<Peer> = {}): Peer {
 }
 
 const network: NetworkConfig = {
+  usePsk: false,
   dns: DEFAULT_DNS,
   topology: 'hybrid', subnet: '10.100.0', port: 51820, keepalive: 25, gatewayId: '8',
 };
