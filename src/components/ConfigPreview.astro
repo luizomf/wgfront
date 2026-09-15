@@ -4,7 +4,7 @@
 <section class="section" id="config-preview-section" hidden>
   <h2 class="preview__title text-secondary">Preview da Configuração</h2>
   <div class="preview__errors" id="routing-errors" role="alert" aria-atomic="true" hidden>
-    <p>Corrija o roteamento para visualizar, copiar ou baixar as configurações:</p>
+    <p>Corrija os problemas abaixo para visualizar, copiar ou baixar as configurações:</p>
     <ul id="routing-issues"></ul>
   </div>
   <div class="preview__tabs" id="preview-tabs"></div>
@@ -253,7 +253,7 @@
       keySummary = generateKeySummary(state.peers, state.network);
     } catch {
       clearPreview();
-      showIssues(['Não foi possível gerar as configurações. Revise os nós e o roteamento.']);
+      showIssues(['Não foi possível gerar as configurações. Revise os nós, o DNS e o roteamento.']);
       return false;
     }
 

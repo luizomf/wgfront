@@ -5,6 +5,7 @@ import {
   generateKeySummary,
 } from '../config-generator';
 import type { Peer, NetworkConfig } from '../types';
+import { DEFAULT_DNS } from '../dns';
 
 function makePeer(overrides: Partial<Peer> = {}): Peer {
   return {
@@ -16,6 +17,7 @@ function makePeer(overrides: Partial<Peer> = {}): Peer {
     wgOctet: 1,
     role: 'hub',
     fullTunnel: false,
+    dns: null,
     gatewayId: '',
     natGateway: false,
     natInterface: 'eth0',
@@ -28,6 +30,7 @@ function makePeer(overrides: Partial<Peer> = {}): Peer {
 }
 
 const network: NetworkConfig = {
+  dns: DEFAULT_DNS,
   subnet: '10.100.0',
   port: 51820,
   keepalive: 25,
@@ -36,6 +39,41 @@ const network: NetworkConfig = {
 };
 
 describe('generateConfig', () => {
+  it('changes only the DNS line when the inherited default changes', () => {
+    const self = makePeer({ fullTunnel: true, gatewayId: '2' });
+    const peers = [self, makePeer({ id: '2', wgOctet: 2 })];
+    const before = generateConfig(self, peers, network);
+    const after = generateConfig(self, peers, { ...network, dns: '9.9.9.9 2620:fe::fe' });
+    expect(after).toBe(before.replace(`DNS = ${DEFAULT_DNS}`, 'DNS = 9.9.9.9, 2620:fe::fe'));
+  });
+
+  it('allows custom DNS in split tunnel without adding any routes', () => {
+    const self = makePeer();
+    const custom = { ...self, dns: '10.100.0.8' };
+    const before = generateConfig(self, [self], network);
+    const after = generateConfig(custom, [custom], network);
+    expect(after).toContain('DNS = 10.100.0.8');
+    expect(after.replace('DNS = 10.100.0.8\n', '')).toBe(before);
+  });
+
+  it('omits DNS on an explicit empty override without changing full-tunnel routes', () => {
+    const self = makePeer({ fullTunnel: true, gatewayId: '2' });
+    const gateway = makePeer({ id: '2', wgOctet: 2 });
+    const custom = { ...self, dns: '' };
+    const before = generateConfig(self, [self, gateway], network);
+    const after = generateConfig(custom, [custom, gateway], network);
+    expect(after).toBe(before.replace(`DNS = ${DEFAULT_DNS}\n`, ''));
+    expect(after).toContain('AllowedIPs = 0.0.0.0/0, ::/0');
+  });
+
+  it('blocks all config exports for invalid effective DNS, including split-tunnel overrides', () => {
+    const self = makePeer({ dns: '1.1.1.1\nPostUp = command' });
+    expect(() => generateConfig(self, [self], network)).toThrow('DNS inválido');
+    expect(() => generateAllConfigs([self], network)).toThrow('DNS inválido');
+    const full = makePeer({ fullTunnel: true, gatewayId: '2' });
+    expect(() => generateAllConfigs([full, makePeer({ id: '2', wgOctet: 2 })], { ...network, dns: 'invalid' })).toThrow('DNS inválido');
+  });
+
   it('produces [Interface] section for self', () => {
     const self = makePeer();
     const config = generateConfig(self, [self], network);

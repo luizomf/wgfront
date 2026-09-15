@@ -16,12 +16,14 @@ export interface Peer {
   keys: KeyPair;
   role: PeerRole;
   fullTunnel: boolean;
+  dns: string | null;
   gatewayId: string;
   natGateway: boolean;
   natInterface: string;
 }
 
 export interface NetworkConfig {
+  dns: string;
   subnet: string;
   port: number;
   keepalive: number;

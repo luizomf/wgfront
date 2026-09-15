@@ -34,6 +34,17 @@ describe('atomic structure import', () => {
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects unsafe DNS before generating keys or replacing state', async () => {
+    const { store, json } = await fixture();
+    const original = store.getState();
+    const calls = generateKeyPair.mock.calls.length;
+    const data = JSON.parse(json);
+    data.peers[0].dns = '1.1.1.1;command';
+    await expect(store.importStructure(JSON.stringify(data))).rejects.toThrow('DNS do nó');
+    expect(generateKeyPair).toHaveBeenCalledTimes(calls);
+    expect(store.getState()).toBe(original);
+  });
+
   it('preserves the current editor on parsing or key-generation failure', async () => {
     const { store, json } = await fixture();
     const original = store.getState();

@@ -1,10 +1,11 @@
 import type { NetworkConfig, Peer } from './types';
 import { isValidIp, isValidOctet, isValidPort, isValidSubnet } from './validators';
+import { DEFAULT_DNS, parseDnsServers } from './dns';
 
 export const MAX_STRUCTURE_BYTES = 1_000_000;
 
 export interface NetworkStructure {
-  version: 1;
+  version: 2;
   network: NetworkConfig;
   peers: Omit<Peer, 'keys'>[];
 }
@@ -27,6 +28,11 @@ function text(value: unknown, field: string, max = 255): string {
   return value;
 }
 
+function validateDns(value: unknown, field: string): void {
+  const result = text(value, field, 1024);
+  try { parseDnsServers(result); } catch { invalid(field); }
+}
+
 function id(value: unknown, allowEmpty = false): string {
   const result = text(value, 'identificador', 64);
   if (!(allowEmpty && result === '') && !/^[a-zA-Z0-9_-]+$/.test(result)) invalid('identificador');
@@ -44,15 +50,16 @@ function endpoint(value: unknown): string {
 /** Explicit allowlists keep keys and future secret fields out of saved structures. */
 export function exportStructure(network: NetworkConfig, peers: Peer[]): string {
   const structure: NetworkStructure = {
-    version: 1,
+    version: 2,
     network: {
+      dns: network.dns,
       subnet: network.subnet, port: network.port, keepalive: network.keepalive,
       topology: network.topology, gatewayId: network.gatewayId,
     },
     peers: peers.map((peer) => ({
       id: peer.id, name: peer.name, label: peer.label, lanIp: peer.lanIp,
       publicEndpointIp: peer.publicEndpointIp, wgOctet: peer.wgOctet,
-      role: peer.role, fullTunnel: peer.fullTunnel, gatewayId: peer.gatewayId,
+      role: peer.role, fullTunnel: peer.fullTunnel, gatewayId: peer.gatewayId, dns: peer.dns,
       natGateway: peer.natGateway, natInterface: peer.natInterface,
     })),
   };
@@ -67,8 +74,11 @@ export function parseStructure(json: string): NetworkStructure {
   let parsed: unknown;
   try { parsed = JSON.parse(json); } catch { invalid('JSON não reconhecido'); }
   const root = object(parsed, ['version', 'network', 'peers']);
-  if (root.version !== 1) invalid('versão não suportada');
-  const network = object(root.network, ['subnet', 'port', 'keepalive', 'topology', 'gatewayId']);
+  if (root.version !== 1 && root.version !== 2) invalid('versão não suportada');
+  const legacy = root.version === 1;
+  const network = object(root.network, ['subnet', 'port', 'keepalive', 'topology', 'gatewayId', ...(legacy ? [] : ['dns'])]);
+  if (legacy) network.dns = DEFAULT_DNS;
+  validateDns(network.dns, 'DNS da rede');
   if (!isValidSubnet(text(network.subnet, 'sub-rede'))) invalid('sub-rede');
   if (typeof network.port !== 'number' || !isValidPort(network.port)) invalid('porta');
   if (typeof network.keepalive !== 'number' || !Number.isInteger(network.keepalive) || network.keepalive < 0 || network.keepalive > 600) invalid('keepalive');
@@ -79,7 +89,9 @@ export function parseStructure(json: string): NetworkStructure {
   const octets = new Set<number>();
   const names = new Set<string>();
   const peers = root.peers.map((value) => {
-    const peer = object(value, ['id', 'name', 'label', 'lanIp', 'publicEndpointIp', 'wgOctet', 'role', 'fullTunnel', 'gatewayId', 'natGateway', 'natInterface']);
+    const peer = object(value, ['id', 'name', 'label', 'lanIp', 'publicEndpointIp', 'wgOctet', 'role', 'fullTunnel', 'gatewayId', 'natGateway', 'natInterface', ...(legacy ? [] : ['dns'])]);
+    if (legacy) peer.dns = null;
+    if (peer.dns !== null) validateDns(peer.dns, 'DNS do nó');
     const peerId = id(peer.id);
     const name = text(peer.name, 'nome', 64);
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name)) invalid('nome do nó');
@@ -98,5 +110,5 @@ export function parseStructure(json: string): NetworkStructure {
     return peer as unknown as Omit<Peer, 'keys'>;
   });
   // Unresolved gateways are valid drafts; routing validation still blocks config exports.
-  return { version: 1, network: network as unknown as NetworkConfig, peers };
+  return { version: 2, network: network as unknown as NetworkConfig, peers };
 }

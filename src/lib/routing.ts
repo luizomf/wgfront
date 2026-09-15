@@ -1,4 +1,5 @@
 import type { NetworkConfig, Peer } from './types';
+import { getDnsServers } from './dns';
 
 export interface RoutingIssue {
   peerId: string;
@@ -33,6 +34,10 @@ export function validateRouting(peers: Peer[], network: NetworkConfig): RoutingI
   const issues: RoutingIssue[] = [];
 
   for (const self of peers) {
+    try { getDnsServers(self, network); }
+    catch (error) {
+      issues.push({ peerId: self.id, message: error instanceof Error ? error.message : 'DNS inválido.' });
+    }
     const candidates = getGatewayCandidates(self, peers, network);
     if (!requiresGateway(self, network)) {
       if (network.topology === 'hybrid' && self.role === 'spoke' && candidates.length === 0) {

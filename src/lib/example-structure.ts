@@ -1,8 +1,10 @@
 import type { NetworkStructure } from './structure';
+import { DEFAULT_DNS } from './dns';
 
 const example: NetworkStructure = {
-  version: 1,
+  version: 2,
   network: {
+    dns: DEFAULT_DNS,
     subnet: '10.42.0',
     port: 51820,
     keepalive: 25,
@@ -12,6 +14,7 @@ const example: NetworkStructure = {
   peers: [
     {
       id: 'example-exit',
+      dns: null,
       name: 'exit-primary',
       label: 'Saída de internet padrão',
       lanIp: '',
@@ -25,6 +28,7 @@ const example: NetworkStructure = {
     },
     {
       id: 'example-alt',
+      dns: null,
       name: 'exit-alternative',
       label: 'Saída alternativa do celular (sem failover automático)',
       lanIp: '',
@@ -38,6 +42,7 @@ const example: NetworkStructure = {
     },
     {
       id: 'example-services',
+      dns: null,
       name: 'services-vps',
       label: 'Servidor de serviços, sem NAT',
       lanIp: '',
@@ -51,6 +56,7 @@ const example: NetworkStructure = {
     },
     {
       id: 'example-laptop',
+      dns: null,
       name: 'laptop',
       label: 'Full Tunnel pela saída padrão',
       lanIp: '192.168.50.10',
@@ -64,6 +70,7 @@ const example: NetworkStructure = {
     },
     {
       id: 'example-phone',
+      dns: null,
       name: 'phone',
       label: 'Cliente móvel com gateway próprio',
       lanIp: '',
@@ -77,6 +84,7 @@ const example: NetworkStructure = {
     },
     {
       id: 'example-workstation',
+      dns: null,
       name: 'workstation',
       label: 'Split Tunnel: só servidores pela VPN',
       lanIp: '192.168.50.30',

@@ -1,4 +1,5 @@
 ---
+import { DEFAULT_DNS } from '../lib/dns';
 ---
 
 <section class="section" id="network-settings">
@@ -33,6 +34,17 @@
         <option value="">Não selecionado</option>
       </select>
     </div>
+  </div>
+  <div class="net__field net__dns">
+    <label for="network-dns">DNS padrão da rede (Full Tunnel)</label>
+    <input type="text" id="network-dns" value={DEFAULT_DNS}
+      aria-describedby="network-dns-help network-dns-error" spellcheck="false" />
+    <p class="net__help text-secondary" id="network-dns-help">
+      Usado por nós em Full Tunnel que herdam o DNS da rede. Em Split Tunnel,
+      a herança não adiciona DNS. Informe endereços IPv4 ou IPv6 separados por
+      vírgula ou espaço; vazio omite a linha DNS e mantém as configurações do sistema.
+    </p>
+    <p class="net__help text-secondary" id="network-dns-error" hidden></p>
   </div>
   <p class="net__help text-secondary" id="topology-help"></p>
   <p class="net__help text-secondary" id="gateway-help">
@@ -71,6 +83,14 @@
     min-width: 0;
   }
 
+  .net__dns {
+    margin-top: 1rem;
+  }
+
+  .net__dns input[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+
   .net__help {
     margin-top: 0.75rem;
     font-size: 0.875rem;
@@ -80,6 +100,10 @@
 <script>
   import { updateNetwork, getState, subscribe } from '../lib/store';
   import type { Topology } from '../lib/types';
+  import { parseDnsServers } from '../lib/dns';
+
+  const dnsInput = document.getElementById('network-dns') as HTMLInputElement;
+  const dnsError = document.getElementById('network-dns-error')!;
 
   const subnetInput = document.getElementById('subnet') as HTMLInputElement;
   const portInput = document.getElementById('port') as HTMLInputElement;
@@ -104,6 +128,16 @@
     if (subnetInput !== document.activeElement) subnetInput.value = network.subnet;
     if (portInput !== document.activeElement) portInput.value = String(network.port);
     if (keepaliveInput !== document.activeElement) keepaliveInput.value = String(network.keepalive);
+    if (dnsInput !== document.activeElement) dnsInput.value = network.dns;
+    let dnsMessage = '';
+    try {
+      parseDnsServers(network.dns);
+    } catch (error) {
+      dnsMessage = error instanceof Error ? error.message : 'DNS inválido.';
+    }
+    dnsInput.setAttribute('aria-invalid', String(Boolean(dnsMessage)));
+    dnsError.textContent = dnsMessage;
+    dnsError.hidden = !dnsMessage;
     topologySelect.value = network.topology;
     topologyHelp.textContent = topologyDescriptions[network.topology];
 
@@ -133,6 +167,10 @@
     }
     gatewaySelect.value = network.gatewayId;
   }
+
+  dnsInput.addEventListener('input', () => {
+    updateNetwork({ dns: dnsInput.value });
+  });
 
   gatewaySelect.addEventListener('change', () => {
     updateNetwork({ gatewayId: gatewaySelect.value });

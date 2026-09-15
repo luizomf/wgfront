@@ -1,6 +1,7 @@
 import type { Peer, NetworkConfig } from './types';
 import { generateKeyPair } from './crypto';
 import { parseStructure } from './structure';
+import { DEFAULT_DNS } from './dns';
 
 export interface AppState {
   network: NetworkConfig;
@@ -10,6 +11,7 @@ export interface AppState {
 type Listener = (state: AppState) => void;
 
 const DEFAULT_NETWORK: NetworkConfig = {
+  dns: DEFAULT_DNS,
   subnet: '10.100.0',
   port: 51820,
   keepalive: 25,
@@ -76,6 +78,7 @@ export async function addPeer(): Promise<void> {
     keys,
     role: state.peers.length === 0 ? 'hub' : 'spoke',
     fullTunnel: false,
+    dns: null,
     gatewayId: '',
     natGateway: false,
     natInterface: 'eth0',

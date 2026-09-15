@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { validateRouting } from '../routing';
+import { DEFAULT_DNS } from '../dns';
 
 vi.mock('../crypto', () => ({
   generateKeyPair: vi.fn(async () => ({ privateKey: 'test-private', publicKey: 'test-public' })),
@@ -14,8 +15,23 @@ describe('routing selections in the editor', () => {
     await store.addPeer();
     const { peers, network } = store.getState();
     expect(network.gatewayId).toBe('');
+    expect(network.dns).toBe(DEFAULT_DNS);
+    expect(peers.map((peer) => peer.dns)).toEqual([null, null]);
     expect(peers.map((peer) => peer.gatewayId)).toEqual(['', '']);
     expect(peers.map((peer) => peer.role)).toEqual(['hub', 'spoke']);
+  });
+
+  it('keeps keys and routing untouched when DNS changes and preserves DNS through key regeneration', async () => {
+    const store = await import('../store');
+    await store.addPeer();
+    const before = store.getState().peers[0];
+    store.updateNetwork({ dns: '9.9.9.9' });
+    store.updatePeer(before.id, { dns: '10.100.0.8' });
+    expect(store.getState().peers[0]).toEqual({ ...before, dns: '10.100.0.8' });
+    expect(store.getState().peers[0].keys).toBe(before.keys);
+    await store.regenerateAllKeys();
+    expect(store.getState().network.dns).toBe('9.9.9.9');
+    expect(store.getState().peers[0].dns).toBe('10.100.0.8');
   });
 
   it('keeps a removed per-node gateway invalid rather than using the network fallback', async () => {
