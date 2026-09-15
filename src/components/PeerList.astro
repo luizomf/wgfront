@@ -50,6 +50,7 @@
   import type { NetworkConfig, Peer, PeerRole } from '../lib/types';
   import { getGatewayCandidates } from '../lib/routing';
   import { getDnsServers } from '../lib/dns';
+  import { MTU_HELP, parseMtuInput, validateMtu } from '../lib/mtu';
 
   const container = document.getElementById('peers-container')!;
   const emptyMsg = document.getElementById('peers-empty')!;
@@ -124,6 +125,13 @@
         </div>
         <p class="peer-card__help text-secondary" id="peer-dns-help-${peer.id}"></p>
       </div>
+      <div class="peer-card__mtu peer-card__field">
+        <label for="peer-mtu-${peer.id}">MTU deste nó</label>
+        <input type="text" inputmode="numeric" id="peer-mtu-${peer.id}" data-field="mtu"
+          aria-describedby="peer-mtu-help-${peer.id}" placeholder="Automático" spellcheck="false" />
+        <p class="peer-card__help text-secondary" id="peer-mtu-help-${peer.id}"></p>
+        <p class="peer-card__help text-secondary">Só ajusta o túnel: não altera o MTU do Docker nem corrige a descoberta de MTU do caminho.</p>
+      </div>
       <div class="peer-card__footer">
         <div class="peer-card__options">
           <label class="peer-card__check">
@@ -159,7 +167,8 @@
     card.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])').forEach((input) => {
       input.addEventListener('input', () => {
         const field = input.dataset.field!;
-        const value = field === 'wgOctet' ? parseInt(input.value, 10) : input.value;
+        const value = field === 'mtu' ? parseMtuInput(input.value)
+          : field === 'wgOctet' ? parseInt(input.value, 10) : input.value;
         updatePeer(peer.id, { [field]: value } as Partial<Peer>);
       });
     });
@@ -270,6 +279,23 @@
     input.setAttribute('aria-invalid', String(invalid));
   }
 
+  function renderMtu(card: HTMLElement, peer: Peer): void {
+    const input = card.querySelector<HTMLInputElement>('input[data-field="mtu"]')!;
+    const help = card.querySelector<HTMLElement>('.peer-card__mtu .peer-card__help')!;
+    // Preserve malformed text even after blur; a valid same-ID import replaces it.
+    if (input !== document.activeElement && !Number.isNaN(peer.mtu)) {
+      input.value = peer.mtu === null ? '' : String(peer.mtu);
+    }
+    try {
+      validateMtu(peer.mtu);
+      input.setAttribute('aria-invalid', 'false');
+      help.textContent = MTU_HELP;
+    } catch (error) {
+      input.setAttribute('aria-invalid', 'true');
+      help.textContent = error instanceof Error ? error.message : 'MTU inválido.';
+    }
+  }
+
   function render(): void {
     const { peers, network } = getState();
     emptyMsg.hidden = peers.length > 0;
@@ -320,6 +346,7 @@
       card.querySelector('.peer-card__remove')!.setAttribute('aria-label', `Remover ${peer.name}`);
       renderGateway(card, peer, peers, network);
       renderDns(card, peer, network);
+      renderMtu(card, peer);
     }
   }
 
@@ -359,6 +386,7 @@
   }
 
   .peer-card__gateway,
+  .peer-card__mtu,
   .peer-card__dns {
     margin-top: 0.75rem;
   }
@@ -379,6 +407,7 @@
     overflow-wrap: anywhere;
   }
 
+  .peer-card__mtu input[aria-invalid="true"],
   .peer-card__gateway select[aria-invalid="true"],
   .peer-card__dns input[aria-invalid="true"] {
     border-color: var(--danger);

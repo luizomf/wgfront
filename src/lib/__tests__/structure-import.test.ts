@@ -16,7 +16,7 @@ async function fixture() {
   await store.addPeer();
   await store.addPeer();
   store.updateNetwork({ topology: 'hybrid', gatewayId: '1' });
-  store.updatePeer('2', { fullTunnel: true, gatewayId: '1' });
+  store.updatePeer('2', { fullTunnel: true, gatewayId: '1', mtu: 1420 });
   return { store, json: exportStructure(store.getState().network, store.getState().peers) };
 }
 
@@ -41,6 +41,17 @@ describe('atomic structure import', () => {
     const data = JSON.parse(json);
     data.peers[0].dns = '1.1.1.1;command';
     await expect(store.importStructure(JSON.stringify(data))).rejects.toThrow('DNS do nó');
+    expect(generateKeyPair).toHaveBeenCalledTimes(calls);
+    expect(store.getState()).toBe(original);
+  });
+
+  it.each([1279, 65536, 1420.5, '1420', 'bad'])('rejects invalid MTU %j before generating keys or replacing state', async (mtu) => {
+    const { store, json } = await fixture();
+    const original = store.getState();
+    const calls = generateKeyPair.mock.calls.length;
+    const data = JSON.parse(json);
+    data.peers[0].mtu = mtu;
+    await expect(store.importStructure(JSON.stringify(data))).rejects.toThrow('MTU');
     expect(generateKeyPair).toHaveBeenCalledTimes(calls);
     expect(store.getState()).toBe(original);
   });

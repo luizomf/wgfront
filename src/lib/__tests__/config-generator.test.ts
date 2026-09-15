@@ -18,6 +18,7 @@ function makePeer(overrides: Partial<Peer> = {}): Peer {
     role: 'hub',
     fullTunnel: false,
     dns: null,
+    mtu: null,
     gatewayId: '',
     natGateway: false,
     natInterface: 'eth0',

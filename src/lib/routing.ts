@@ -1,5 +1,6 @@
 import type { NetworkConfig, Peer } from './types';
 import { getDnsServers } from './dns';
+import { validateMtu } from './mtu';
 
 export interface RoutingIssue {
   peerId: string;
@@ -34,6 +35,10 @@ export function validateRouting(peers: Peer[], network: NetworkConfig): RoutingI
   const issues: RoutingIssue[] = [];
 
   for (const self of peers) {
+    try { validateMtu(self.mtu); }
+    catch (error) {
+      issues.push({ peerId: self.id, message: error instanceof Error ? error.message : 'MTU inválido.' });
+    }
     try { getDnsServers(self, network); }
     catch (error) {
       issues.push({ peerId: self.id, message: error instanceof Error ? error.message : 'DNS inválido.' });
