@@ -1,4 +1,4 @@
-# WireGuard structure format (version 3)
+# WireGuard structure format (version 4)
 
 A structure file describes the editor's nodes and routing choices. It is not a
 WireGuard `.conf`, a key backup, or a deployment script. It can be shared with an
@@ -8,8 +8,9 @@ infrastructure agent as input, subject to the privacy warning below.
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "network": {
+    "usePsk": false,
     "dns": "1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001",
     "subnet": "10.100.0",
     "port": 51820,
@@ -61,8 +62,13 @@ All illustrated fields are required. Unknown fields, including `keys`,
 `privateKey`, `publicKey`, preshared keys, and executable hooks, are rejected.
 Export uses an explicit allowlist: cryptographic keys are never included.
 
-- `version`: integer `3` for new exports. Version `1` and `2` imports are migrated
-  as described below; other versions are rejected.
+- `version`: integer `4` for new exports. Version `1`, `2`, and `3` imports are
+  migrated as described below; other versions are rejected.
+- `network.usePsk`: boolean, required in v4 and absent in older versions. Defaults
+  to `false` in the editor and legacy imports. When `true`, generate an extra
+  random 32-byte/base64 PSK for each directly connected unordered pair. The same
+  key goes into both matching Peer blocks; different pairs have independent
+  keys. Only this choice is saved, never pair IDs/maps or secret material.
 - `network.dns`: default resolvers as a string, up to 1024 characters. Comma- or
   space-separated IPv4/IPv6 literals, or `""` to omit DNS. No hostnames, ports,
   scoped IPv6 addresses, CIDRs, search domains, or DoH URLs.
@@ -93,7 +99,7 @@ Export uses an explicit allowlist: cryptographic keys are never included.
   `""` explicitly omits the `DNS =` line, keeping system DNS settings. This does
   not change routes or configure a DNS server; verify resolver reachability.
 - `mtu`: `null` for automatic MTU (omit `MTU =`, letting `wg-quick` choose it),
-  or an integer from 1280 to 65535 inclusive. Required in v3, absent in v1/v2.
+  or an integer from 1280 to 65535 inclusive. Required in v3/v4, absent in v1/v2.
   Strings, fractions, booleans, and out-of-range values are rejected, never coerced.
   An override adds one `MTU = <value>` in this node's `[Interface]` only. The minimum
   supports the generator's always-dual-stack configs; the range does not guarantee
@@ -110,7 +116,11 @@ Dangling or missing gateway references are permitted as unfinished drafts, but
 config preview/download remain blocked until routing is valid. See the
 [README routing table](../README.md#connections-versus-routing) for semantics.
 
-## Version 1 and 2 compatibility
+## Version 1, 2, and 3 compatibility
+
+All v1/v2/v3 imports require `network.usePsk` to be absent and supply `false`.
+Version 3 otherwise has the same fields as v4: DNS and MTU choices are preserved.
+Only new v4 files require the explicit boolean; it is never coerced or inferred.
 
 Version 2 has the same fields except each node's `mtu`, which must be absent.
 Import supplies `mtu: null` for every node and preserves all DNS choices and other
@@ -121,8 +131,8 @@ absent. Each node receives `mtu: null`. Import supplies the original default
 `1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001` and sets every
 node's `dns` to `null`. This preserves the original behavior: full-tunnel nodes
 receive that exact DNS line; split-tunnel nodes receive none. All other settings
-are preserved. Subsequent exports use version 3. Old generators that only support
-version 1 or 2 cannot import version 3 files.
+are preserved. Subsequent exports use version 4. Old generators that only support
+version 1, 2, or 3 cannot import version 4 files.
 
 Invalid live MTU edits also block structure export before JSON serialization;
 they must never become `null` through JavaScript's NaN/Infinity serialization.
@@ -130,20 +140,34 @@ they must never become `null` through JavaScript's NaN/Infinity serialization.
 ## Import and key rotation
 
 Import replaces rather than merges the editor. When nodes already exist, the UI
-asks for confirmation. The full file is validated and new X25519 key pairs are
-generated in the browser before publishing the replacement state. Parse or key
-generation failure leaves the editor unchanged. Edits made while key generation
-is in progress abort the replacement instead of being overwritten.
+asks for confirmation. The full file is validated and new X25519 key pairs plus
+all enabled PSKs are generated in the browser before one publication of the
+replacement state. Parse or key generation failure leaves the editor unchanged.
+Edits made while file reading or key generation is in progress abort the
+replacement instead of being overwritten.
 
-Every import creates new keys for every imported node. Exporting a structure does
-not rotate anything. For rotation, import the saved structure (or use Regenerate
-Keys on the existing editor), then download and deploy the new configs. Each
-changed private key requires distributing its corresponding public key to the
-other peers. This tool does not perform that rollout or promise zero downtime.
+Every import creates new keys for every imported node and enabled direct pair.
+Exporting a structure does not rotate anything. For rotation, import the saved
+structure (or use Regenerate Keys on the existing editor), then download and
+deploy the new configs. Regenerate Keys also publishes X25519 and PSKs together,
+preserving metadata edits made during generation; failure never partially rotates.
+Each changed private key requires distributing its corresponding public key to
+the other peers. **Both ends need matching regenerated configs, including the
+same pair PSK**; a mismatch prevents the connection from working. This tool does
+not perform that rollout or promise zero downtime.
+
+PSK enablement does not alter routes. Direct connections use mesh-all or, in
+hybrid/hub-spoke, hubs-to-all and spokes-to-hubs only. Operational pair secrets
+live separately in memory, not on serialized peers/network. Graph edits retain
+existing pair keys, generate missing ones, and drop removed ones. Ordinary DNS,
+MTU, names, gateway, Full Tunnel, and keepalive edits do not rotate secrets.
+Disabling PSK discards them; re-enabling generates fresh material. Enabled config
+exports fail closed on missing/malformed/noncanonical/all-zero PSKs. Structure
+exports remain key-free blueprints, not validation or backups of live secrets.
 
 ## Privacy and agent use
 
-Files contain no WireGuard keys, but names, IP addresses, endpoints, and topology
+Files contain no WireGuard keys (private, public, or PSKs), but names, IP addresses, endpoints, and topology
 may still be sensitive. Do not publish them indiscriminately. The browser does
 not upload structures or persist them automatically; save the JSON explicitly.
 

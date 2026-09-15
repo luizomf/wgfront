@@ -2,15 +2,18 @@ import type { Peer, NetworkConfig } from './types';
 import { generateKeyPair } from './crypto';
 import { parseStructure } from './structure';
 import { DEFAULT_DNS } from './dns';
+import { reconcilePairKeys, type PairKeys } from './psk';
 
 export interface AppState {
   network: NetworkConfig;
   peers: Peer[];
+  pairKeys: PairKeys;
 }
 
 type Listener = (state: AppState) => void;
 
 const DEFAULT_NETWORK: NetworkConfig = {
+  usePsk: false,
   dns: DEFAULT_DNS,
   subnet: '10.100.0',
   port: 51820,
@@ -22,6 +25,7 @@ const DEFAULT_NETWORK: NetworkConfig = {
 let state: AppState = {
   network: { ...DEFAULT_NETWORK },
   peers: [],
+  pairKeys: new Map(),
 };
 
 const listeners = new Set<Listener>();
@@ -43,12 +47,16 @@ export function subscribe(fn: Listener): () => void {
   return () => listeners.delete(fn);
 }
 
-export function updateNetwork(partial: Partial<NetworkConfig>): void {
-  state = {
-    ...state,
-    network: { ...state.network, ...partial },
-  };
+/** Reconcile all secrets before a single observable publication. */
+function commit(next: Omit<AppState, 'pairKeys'>, previous: PairKeys = state.pairKeys, replace = false): void {
+  const pairKeys = reconcilePairKeys(next.peers, next.network, previous);
+  if (replace) replacementVersion++;
+  state = { ...next, pairKeys };
   emit();
+}
+
+export function updateNetwork(partial: Partial<NetworkConfig>): void {
+  commit({ ...state, network: { ...state.network, ...partial } });
 }
 
 export async function addPeer(): Promise<void> {
@@ -85,40 +93,36 @@ export async function addPeer(): Promise<void> {
     natInterface: 'eth0',
   };
 
-  state = { ...state, peers: [...state.peers, peer] };
-  emit();
+  commit({ ...state, peers: [...state.peers, peer] });
 }
 
 export function updatePeer(id: string, partial: Partial<Peer>): void {
-  state = {
+  commit({
     ...state,
     peers: state.peers.map((p) =>
       p.id === id ? { ...p, ...partial } : p,
     ),
-  };
-  emit();
+  });
 }
 
 export function removePeer(id: string): void {
-  state = {
-    ...state,
-    peers: state.peers.filter((p) => p.id !== id),
-  };
-  emit();
+  commit({ ...state, peers: state.peers.filter((p) => p.id !== id) });
 }
 
 export async function regenerateAllKeys(): Promise<void> {
   const version = replacementVersion;
-  const pairs = await Promise.all(
-    state.peers.map(async (peer) => ({ id: peer.id, keys: await generateKeyPair() })),
-  );
-  if (version !== replacementVersion) throw new Error('A estrutura mudou durante a geração das chaves.');
-  const keysById = new Map(pairs.map(({ id, keys }) => [id, keys]));
-  state = {
+  const keysById = new Map<string, Peer['keys']>();
+  // Include nodes added while awaiting crypto, without overwriting newer metadata.
+  do {
+    const missing = state.peers.filter((peer) => !keysById.has(peer.id));
+    const pairs = await Promise.all(missing.map(async (peer) => ({ id: peer.id, keys: await generateKeyPair() })));
+    if (version !== replacementVersion) throw new Error('A estrutura mudou durante a geração das chaves.');
+    for (const { id, keys } of pairs) keysById.set(id, keys);
+  } while (state.peers.some((peer) => !keysById.has(peer.id)));
+  commit({
     ...state,
-    peers: state.peers.map((peer) => ({ ...peer, keys: keysById.get(peer.id) ?? peer.keys })),
-  };
-  emit();
+    peers: state.peers.map((peer) => ({ ...peer, keys: keysById.get(peer.id)! })),
+  }, new Map(), true);
 }
 
 export async function importStructure(json: string): Promise<void> {
@@ -128,7 +132,5 @@ export async function importStructure(json: string): Promise<void> {
     ...peer, keys: await generateKeyPair(),
   })));
   if (state !== previous) throw new Error('A rede foi editada durante a importação. Tente importar novamente.');
-  replacementVersion++;
-  state = { network: structure.network, peers };
-  emit();
+  commit({ network: structure.network, peers }, new Map(), true);
 }

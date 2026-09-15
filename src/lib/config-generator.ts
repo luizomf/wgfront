@@ -2,6 +2,7 @@ import type { Peer, NetworkConfig, GeneratedConfig } from './types';
 import { planPeerRoutes } from './routing';
 import { getDnsServers } from './dns';
 import { validateMtu } from './mtu';
+import { getPairKey, type PairKeys } from './psk';
 
 function peerWgIp(subnet: string, octet: number): string {
   return `${subnet}.${octet}`;
@@ -19,6 +20,7 @@ function buildPeerBlock(
   peer: Peer,
   network: NetworkConfig,
   allowedIPs: string[],
+  presharedKey?: string,
 ): string {
   const wgIp = peerWgIp(network.subnet, peer.wgOctet);
   const endpoint = peerEndpoint(peer);
@@ -27,6 +29,7 @@ function buildPeerBlock(
   lines.push(`# ${peer.label} - ${endpoint}:${network.port} -> ${wgIp}/32`);
   lines.push('[Peer]');
   lines.push(`PublicKey = ${peer.keys.publicKey}`);
+  if (presharedKey !== undefined) lines.push(`PresharedKey = ${presharedKey}`);
 
   lines.push(`AllowedIPs = ${allowedIPs.join(', ')}`);
 
@@ -44,6 +47,7 @@ export function generateConfig(
   self: Peer,
   allPeers: Peer[],
   network: NetworkConfig,
+  pairKeys: PairKeys = new Map(),
 ): string {
   validateMtu(self.mtu);
   const routes = planPeerRoutes(self, allPeers, network);
@@ -89,7 +93,8 @@ export function generateConfig(
   lines.push('');
 
   for (const { peer, allowedIPs } of routes) {
-    lines.push(buildPeerBlock(peer, network, allowedIPs));
+    lines.push(buildPeerBlock(peer, network, allowedIPs,
+      network.usePsk ? getPairKey(pairKeys, self.id, peer.id) : undefined));
   }
 
   return lines.join('\n');
@@ -98,12 +103,13 @@ export function generateConfig(
 export function generateAllConfigs(
   peers: Peer[],
   network: NetworkConfig,
+  pairKeys: PairKeys = new Map(),
 ): GeneratedConfig[] {
   return peers.map((self) => ({
     peerId: self.id,
     peerName: self.name,
     filename: `${self.name}.conf`,
-    content: generateConfig(self, peers, network),
+    content: generateConfig(self, peers, network, pairKeys),
   }));
 }
 

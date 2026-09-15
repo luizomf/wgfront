@@ -46,6 +46,15 @@ import { DEFAULT_DNS } from '../lib/dns';
     </p>
     <p class="net__help text-secondary" id="network-dns-error" hidden></p>
   </div>
+  <label>
+    <input type="checkbox" id="network-psk" aria-describedby="psk-help" />
+    Usar PSK
+  </label>
+  <p class="net__help text-secondary" id="psk-help">
+    Chave extra opcional, criada automaticamente para cada conexão. Após regerar
+    as chaves, instale as configurações correspondentes nas duas pontas.
+  </p>
+  <p class="net__help" id="network-change-error" role="alert" hidden></p>
   <p class="net__help text-secondary" id="topology-help"></p>
   <p class="net__help text-secondary" id="gateway-help">
     Full Tunnel exige um gateway explícito em qualquer topologia: ele recebe as
@@ -102,6 +111,9 @@ import { DEFAULT_DNS } from '../lib/dns';
   import type { Topology } from '../lib/types';
   import { parseDnsServers } from '../lib/dns';
 
+  const pskInput = document.getElementById('network-psk') as HTMLInputElement;
+  const changeError = document.getElementById('network-change-error')!;
+
   const dnsInput = document.getElementById('network-dns') as HTMLInputElement;
   const dnsError = document.getElementById('network-dns-error')!;
 
@@ -138,6 +150,7 @@ import { DEFAULT_DNS } from '../lib/dns';
     dnsInput.setAttribute('aria-invalid', String(Boolean(dnsMessage)));
     dnsError.textContent = dnsMessage;
     dnsError.hidden = !dnsMessage;
+    pskInput.checked = network.usePsk;
     topologySelect.value = network.topology;
     topologyHelp.textContent = topologyDescriptions[network.topology];
 
@@ -190,8 +203,22 @@ import { DEFAULT_DNS } from '../lib/dns';
     if (!isNaN(val)) updateNetwork({ keepalive: val });
   });
 
+  function changeConnections(partial: Parameters<typeof updateNetwork>[0]): void {
+    try {
+      updateNetwork(partial);
+      changeError.hidden = true;
+    } catch {
+      render();
+      changeError.textContent = 'Não foi possível gerar as PSKs. Nada foi alterado. Tente novamente.';
+      changeError.hidden = false;
+    }
+  }
+
   topologySelect.addEventListener('change', () => {
-    updateNetwork({ topology: topologySelect.value as Topology });
+    changeConnections({ topology: topologySelect.value as Topology });
+  });
+  pskInput.addEventListener('change', () => {
+    changeConnections({ usePsk: pskInput.checked });
   });
 
   subscribe(render);

@@ -25,6 +25,7 @@ export interface Peer {
 }
 
 export interface NetworkConfig {
+  usePsk: boolean;
   dns: string;
   subnet: string;
   port: number;

@@ -9,8 +9,9 @@
     <input id="structure-file" type="file" accept=".json,application/json" hidden />
   </div>
   <p class="text-secondary structure__help">
-    Salve os nós e o roteamento, sem chaves privadas ou públicas. Importar substitui
-    a estrutura atual e gera chaves novas para todos os nós. O JSON ainda contém
+    Salve os nós e o roteamento, sem chaves privadas, públicas ou PSKs. Importar substitui
+    a estrutura atual e gera chaves novas para todos os nós e conexões com PSK.
+    Instale as configurações correspondentes nas duas pontas após a rotação. O JSON ainda contém
     nomes e endereços da rede: compartilhe com cuidado.
   </p>
   <details class="structure__help">
@@ -90,7 +91,9 @@
     render();
     try {
       if (file.size > MAX_STRUCTURE_BYTES) throw new Error('O arquivo deve ter no máximo 1 MB.');
+      const previous = getState();
       const json = await file.text();
+      if (getState() !== previous) throw new Error('A rede foi editada durante a importação. Tente importar novamente.');
       parseStructure(json);
       if (getState().peers.length > 0 && !confirm('Substituir todos os nós da tela? A importação gera chaves novas. Exporte a estrutura atual antes, se quiser preservá-la.')) {
         status.textContent = 'Importação cancelada. A estrutura atual foi preservada.';
@@ -98,7 +101,7 @@
       }
       status.textContent = 'Importando estrutura e gerando chaves novas…';
       await importStructure(json);
-      status.textContent = 'Estrutura importada com chaves novas. Ao aplicar a rotação, atualize também as chaves públicas nos peers das outras máquinas.';
+      status.textContent = 'Estrutura importada com chaves novas. Instale as configurações correspondentes nas duas pontas: chaves públicas e PSKs precisam combinar.';
     } catch (error) { reportError(error); }
     finally { busy = false; render(); }
   });

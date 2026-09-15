@@ -14,6 +14,7 @@ No server. No tracking. Just math.
 - **Explicit gateway selection** — network default with per-node overrides; no first-peer or NAT-checkbox fallback
 - **Full tunnel** — route internet traffic through the selected gateway with `AllowedIPs = 0.0.0.0/0, ::/0`, keeping direct peers on host routes
 - **Configurable DNS** — keep the existing full-tunnel defaults, choose network-wide IPv4/IPv6 resolvers, or override/omit DNS per node
+- **Optional automatic PSK** — off by default; one browser-generated extra symmetric key per direct connection, matching in both directions
 - **Optional per-node MTU** — automatic by default; explicit dual-stack overrides from 1280 to 65535
 - **Config validation** — invalid gateway selections, circular internet exits, invalid effective DNS, and invalid MTU block config preview and export
 - **Structure import/export** — versioned JSON containing nodes and routing settings, never keys; import generates fresh keys for rotation
@@ -57,7 +58,8 @@ PLAYWRIGHT_CHANNEL=chrome npm run test:e2e
 
 The browser suite serves the production build (no dev-server hot reload) and
 covers hybrid peers, ZIP contents, gateway overrides/removal, role/topology
-changes, DNS and MTU editing, stale export protection, legacy structure migrations,
+changes, DNS/MTU/PSK editing, PSK symmetry and export parity, atomic key rotation
+and failure recovery, stale export protection, legacy structure migrations,
 structure round-trips, and mobile layout.
 
 ## Browser Support
@@ -108,15 +110,17 @@ hosts, real endpoints, or embedded key material.
 
 Use **Export Structure** to save `wireguard-structure.json`. It contains node
 names, addresses, roles, gateway choices, and network settings, but **no private
-or public keys**. You can save unfinished gateway selections as a draft even
+or public keys, and no PSKs**. Only the PSK enablement flag is saved. You can save unfinished gateway selections as a draft even
 when config export is blocked.
 
 Later, use **Import Structure** (available even in an empty editor). It validates
 the file, asks before replacing existing nodes, and generates fresh keys for
 every imported node. Then download the new configs and update the matching
-public keys on all affected machines. Exporting the JSON does not rotate keys.
+public keys on all affected machines. With PSK enabled, import also creates fresh
+pair secrets: install the matching generated configs at both ends of every
+connection. Exporting the JSON does not rotate keys.
 
-The [version 3 format reference](docs/structure-format.md) includes an example and
+The [version 4 format reference](docs/structure-format.md) includes an example and
 field constraints for tools or infrastructure agents. This is a network blueprint,
 not an executable deployment plan. Share carefully: it still contains hostnames,
 IP addresses, and topology. It is not a backup of your current cryptographic keys.
@@ -135,7 +139,7 @@ search domains, or DoH URLs. The tool validates syntax locally, not reachability
 It does not install a DNS server or add routes to reach your chosen resolvers;
 check their reachability and the routes they will use, especially in split tunnel.
 
-Structure exports use version 3 and retain these choices without keys.
+Structure exports use version 4 and retain these choices without keys.
 Version 1 files still import with the exact original DNS defaults and behavior;
 version 2 files preserve their DNS choices.
 
@@ -161,6 +165,40 @@ ICMP/firewall behavior separately; this tool does not inspect or alter hosts.
 Version 3 structures store `mtu` as `null` (automatic) or a valid integer per node.
 Version 1 and 2 structures import with automatic MTU and retain their historical
 DNS behavior.
+
+## Automatic PSK
+
+**Usar PSK** is optional and disabled by default. It adds a random 32-byte
+preshared key to each directly connected unordered pair, identically in both
+matching `[Peer]` blocks. This is an extra symmetric key mixed into WireGuard's
+public-key cryptography, not a passphrase or encryption of a private-key file.
+There is no manual key editor.
+
+Mesh connects every pair. Hybrid and hub-spoke connect hubs/servers to everyone,
+and spokes/clients only to hubs/servers. PSKs follow these direct connections,
+not gateway route ownership; enabling them never adds routes or connections.
+The six-node example has 12 pairs (24 Peer blocks) in hybrid/hub-spoke and 15
+pairs (30 blocks) in mesh. Its PSK flag starts off and it contains no keys.
+
+Adding nodes or changing topology/roles generates only missing pair keys,
+retains existing connections' keys, and discards removed connections' keys.
+Names, DNS, MTU, gateways, Full Tunnel, and keepalive edits do not rotate PSKs.
+Disabling discards the pair secrets and restores output without `PresharedKey`;
+re-enabling creates fresh keys. Empty or single-node networks need none.
+Missing, malformed, noncanonical, or all-zero PSKs block enabled config exports
+rather than silently omitting the extra key. Regenerate Keys repairs the material.
+
+**Regenerate Keys** and structure import rotate X25519 keys and enabled PSKs
+together before publishing. Entropy failure leaves the prior keys/state intact;
+regeneration preserves newer metadata edits and stale imports abort. After a
+rotation, **install the corresponding generated configs at both ends**; mismatched
+PSKs prevent the connection from working. Coordinate that rollout yourself.
+
+Secrets exist only in browser memory and explicitly generated configs/ZIPs or
+copies. No storage, logging, upload, external key service, or random fallback is
+used. Preview, individual downloads, clipboard copies, and ZIPs use the same
+pair secrets. Structure v4 stores only `network.usePsk`; v1/v2/v3 imports default
+to PSK off and retain their historical DNS and MTU migrations.
 
 ## Hybrid Example
 
@@ -198,7 +236,8 @@ src/
   components/       Astro components (Header, PeerList, ConfigPreview, etc.)
   layouts/          Base HTML layout
   lib/              Pure TypeScript logic
-    crypto.ts         X25519 key generation
+    crypto.ts         X25519 and CSPRNG PSK generation
+    psk.ts            Direct-pair secret reconciliation and fail-closed validation
     config-generator  Config string builder
     routing.ts        Direct peer selection, route ownership, and config validation
     dns.ts            DNS inheritance and literal resolver validation

@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { validateRouting } from '../routing';
 import { DEFAULT_DNS } from '../dns';
 
-vi.mock('../crypto', () => ({
+vi.mock('../crypto', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../crypto')>(),
   generateKeyPair: vi.fn(async () => ({ privateKey: 'test-private', publicKey: 'test-public' })),
 }));
 

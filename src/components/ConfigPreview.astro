@@ -249,11 +249,11 @@
         }));
         return false;
       }
-      currentConfigs = generateAllConfigs(state.peers, state.network);
+      currentConfigs = generateAllConfigs(state.peers, state.network, state.pairKeys);
       keySummary = generateKeySummary(state.peers, state.network);
     } catch {
       clearPreview();
-      showIssues(['Não foi possível gerar as configurações. Revise os nós, o DNS e o roteamento.']);
+      showIssues(['Não foi possível gerar as configurações. Revise os nós, o DNS e o roteamento; se houver PSK inválida, regere as chaves.']);
       return false;
     }
 
