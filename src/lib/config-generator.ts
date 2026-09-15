@@ -1,6 +1,7 @@
 import type { Peer, NetworkConfig, GeneratedConfig } from './types';
 import { planPeerRoutes } from './routing';
 import { getDnsServers } from './dns';
+import { validateMtu } from './mtu';
 
 function peerWgIp(subnet: string, octet: number): string {
   return `${subnet}.${octet}`;
@@ -44,6 +45,7 @@ export function generateConfig(
   allPeers: Peer[],
   network: NetworkConfig,
 ): string {
+  validateMtu(self.mtu);
   const routes = planPeerRoutes(self, allPeers, network);
   const selfWgIp = peerWgIp(network.subnet, self.wgOctet);
   const lines: string[] = [];
@@ -56,6 +58,7 @@ export function generateConfig(
 
   const dns = getDnsServers(self, network);
   if (dns.length > 0) lines.push(`DNS = ${dns.join(', ')}`);
+  if (self.mtu !== null) lines.push(`MTU = ${self.mtu}`);
 
   if (self.natGateway) {
     const iface = self.natInterface || 'eth0';

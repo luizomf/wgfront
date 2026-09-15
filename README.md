@@ -14,7 +14,8 @@ No server. No tracking. Just math.
 - **Explicit gateway selection** — network default with per-node overrides; no first-peer or NAT-checkbox fallback
 - **Full tunnel** — route internet traffic through the selected gateway with `AllowedIPs = 0.0.0.0/0, ::/0`, keeping direct peers on host routes
 - **Configurable DNS** — keep the existing full-tunnel defaults, choose network-wide IPv4/IPv6 resolvers, or override/omit DNS per node
-- **Routing validation** — invalid gateway selections, circular internet exits, and invalid effective DNS block config preview and export
+- **Optional per-node MTU** — automatic by default; explicit dual-stack overrides from 1280 to 65535
+- **Config validation** — invalid gateway selections, circular internet exits, invalid effective DNS, and invalid MTU block config preview and export
 - **Structure import/export** — versioned JSON containing nodes and routing settings, never keys; import generates fresh keys for rotation
 - **One-click example** — load a fictitious, fully populated network with fresh keys to explore routing and exports
 - **Dual-stack IPv6** — ULA addresses (`fd10:100::X`) alongside IPv4
@@ -56,7 +57,8 @@ PLAYWRIGHT_CHANNEL=chrome npm run test:e2e
 
 The browser suite serves the production build (no dev-server hot reload) and
 covers hybrid peers, ZIP contents, gateway overrides/removal, role/topology
-changes, stale export protection, structure round-trips, and mobile layout.
+changes, DNS and MTU editing, stale export protection, legacy structure migrations,
+structure round-trips, and mobile layout.
 
 ## Browser Support
 
@@ -114,7 +116,7 @@ the file, asks before replacing existing nodes, and generates fresh keys for
 every imported node. Then download the new configs and update the matching
 public keys on all affected machines. Exporting the JSON does not rotate keys.
 
-The [version 2 format reference](docs/structure-format.md) includes an example and
+The [version 3 format reference](docs/structure-format.md) includes an example and
 field constraints for tools or infrastructure agents. This is a network blueprint,
 not an executable deployment plan. Share carefully: it still contains hostnames,
 IP addresses, and topology. It is not a backup of your current cryptographic keys.
@@ -133,8 +135,32 @@ search domains, or DoH URLs. The tool validates syntax locally, not reachability
 It does not install a DNS server or add routes to reach your chosen resolvers;
 check their reachability and the routes they will use, especially in split tunnel.
 
-Structure exports now use version 2 and retain these choices without keys.
-Version 1 files still import with the exact original DNS defaults and behavior.
+Structure exports use version 3 and retain these choices without keys.
+Version 1 files still import with the exact original DNS defaults and behavior;
+version 2 files preserve their DNS choices.
+
+## MTU
+
+Each node has an optional **MTU deste nó** field. Leave it blank for automatic
+MTU: no `MTU =` line is emitted, letting `wg-quick` choose it. New nodes and the
+fictitious example use automatic MTU, preserving the previous config output.
+An override adds exactly one `MTU = <value>` to that node's `[Interface]` section.
+Clearing the field restores automatic behavior; DNS, routes, NAT, and keys stay
+unchanged.
+
+Only decimal integers from **1280 to 65535** are accepted, inclusive. The minimum
+reflects the generator's always-dual-stack IPv4/IPv6 configs. Invalid edits are
+not truncated or silently replaced: they block all config previews, copies, and
+downloads, and cannot be saved in a structure. Correct or clear the field first.
+The range validates the setting, not whether it suits your network path.
+
+Tunnel MTU does **not** reconfigure Docker or container network MTUs and does not
+itself repair path-MTU discovery. Diagnose the actual path, encapsulation, and
+ICMP/firewall behavior separately; this tool does not inspect or alter hosts.
+
+Version 3 structures store `mtu` as `null` (automatic) or a valid integer per node.
+Version 1 and 2 structures import with automatic MTU and retain their historical
+DNS behavior.
 
 ## Hybrid Example
 
@@ -176,6 +202,7 @@ src/
     config-generator  Config string builder
     routing.ts        Direct peer selection, route ownership, and config validation
     dns.ts            DNS inheritance and literal resolver validation
+    mtu.ts            Optional MTU parsing and dual-stack validation
     store.ts          Observable state (pub/sub)
     validators.ts     Input validation
     zip.ts            ZIP download via fflate

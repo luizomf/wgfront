@@ -17,6 +17,7 @@ describe('routing selections in the editor', () => {
     expect(network.gatewayId).toBe('');
     expect(network.dns).toBe(DEFAULT_DNS);
     expect(peers.map((peer) => peer.dns)).toEqual([null, null]);
+    expect(peers.map((peer) => peer.mtu)).toEqual([null, null]);
     expect(peers.map((peer) => peer.gatewayId)).toEqual(['', '']);
     expect(peers.map((peer) => peer.role)).toEqual(['hub', 'spoke']);
   });
@@ -32,6 +33,23 @@ describe('routing selections in the editor', () => {
     await store.regenerateAllKeys();
     expect(store.getState().network.dns).toBe('9.9.9.9');
     expect(store.getState().peers[0].dns).toBe('10.100.0.8');
+  });
+
+  it('changes only MTU, preserves invalid editing, and retains MTU through key regeneration', async () => {
+    const store = await import('../store');
+    await store.addPeer();
+    await store.addPeer();
+    const before = store.getState();
+    const peer = before.peers[0];
+    for (const mtu of [1280, 65535, NaN, null, 1420]) {
+      store.updatePeer(peer.id, { mtu });
+      expect(store.getState().peers[0]).toEqual({ ...peer, mtu });
+      expect(store.getState().peers[0].keys).toBe(peer.keys);
+      expect(store.getState().peers[1]).toBe(before.peers[1]);
+      expect(store.getState().network).toBe(before.network);
+    }
+    await store.regenerateAllKeys();
+    expect(store.getState().peers[0].mtu).toBe(1420);
   });
 
   it('keeps a removed per-node gateway invalid rather than using the network fallback', async () => {

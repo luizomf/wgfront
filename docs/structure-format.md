@@ -1,4 +1,4 @@
-# WireGuard structure format (version 2)
+# WireGuard structure format (version 3)
 
 A structure file describes the editor's nodes and routing choices. It is not a
 WireGuard `.conf`, a key backup, or a deployment script. It can be shared with an
@@ -8,7 +8,7 @@ infrastructure agent as input, subject to the privacy warning below.
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "network": {
     "dns": "1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001",
     "subnet": "10.100.0",
@@ -28,6 +28,7 @@ infrastructure agent as input, subject to the privacy warning below.
       "role": "hub",
       "fullTunnel": false,
       "dns": null,
+      "mtu": null,
       "gatewayId": "",
       "natGateway": true,
       "natInterface": "eth0"
@@ -42,6 +43,7 @@ infrastructure agent as input, subject to the privacy warning below.
       "role": "spoke",
       "fullTunnel": true,
       "dns": null,
+      "mtu": null,
       "gatewayId": "",
       "natGateway": false,
       "natInterface": "eth0"
@@ -59,8 +61,8 @@ All illustrated fields are required. Unknown fields, including `keys`,
 `privateKey`, `publicKey`, preshared keys, and executable hooks, are rejected.
 Export uses an explicit allowlist: cryptographic keys are never included.
 
-- `version`: integer `2` for new exports. Version `1` imports are migrated as
-  described below; other versions are rejected.
+- `version`: integer `3` for new exports. Version `1` and `2` imports are migrated
+  as described below; other versions are rejected.
 - `network.dns`: default resolvers as a string, up to 1024 characters. Comma- or
   space-separated IPv4/IPv6 literals, or `""` to omit DNS. No hostnames, ports,
   scoped IPv6 addresses, CIDRs, search domains, or DoH URLs.
@@ -90,6 +92,13 @@ Export uses an explicit allowlist: cryptographic keys are never included.
   either tunnel mode, using the same syntax and length limit as `network.dns`.
   `""` explicitly omits the `DNS =` line, keeping system DNS settings. This does
   not change routes or configure a DNS server; verify resolver reachability.
+- `mtu`: `null` for automatic MTU (omit `MTU =`, letting `wg-quick` choose it),
+  or an integer from 1280 to 65535 inclusive. Required in v3, absent in v1/v2.
+  Strings, fractions, booleans, and out-of-range values are rejected, never coerced.
+  An override adds one `MTU = <value>` in this node's `[Interface]` only. The minimum
+  supports the generator's always-dual-stack configs; the range does not guarantee
+  suitability for a particular path. Tunnel MTU does not itself reconfigure Docker
+  MTUs or repair path-MTU discovery. DNS, routing, NAT, and keys are unaffected.
 - `gatewayId`: per-node override, or `""` to inherit `network.gatewayId`.
 - `natGateway`: boolean. Generates Linux forwarding/NAT hooks; does not select
   anyone's gateway or grant permission to configure a real machine.
@@ -101,15 +110,22 @@ Dangling or missing gateway references are permitted as unfinished drafts, but
 config preview/download remain blocked until routing is valid. See the
 [README routing table](../README.md#connections-versus-routing) for semantics.
 
-## Version 1 compatibility
+## Version 1 and 2 compatibility
 
-Version 1 has the same fields except `network.dns` and each node's `dns`, which
-must be absent. Import supplies the original default
+Version 2 has the same fields except each node's `mtu`, which must be absent.
+Import supplies `mtu: null` for every node and preserves all DNS choices and other
+settings. Version 3 requires `mtu` on every node; omitting it is not automatic.
+
+Version 1 omits `mtu`, `network.dns`, and each node's `dns`; these fields must be
+absent. Each node receives `mtu: null`. Import supplies the original default
 `1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001` and sets every
 node's `dns` to `null`. This preserves the original behavior: full-tunnel nodes
 receive that exact DNS line; split-tunnel nodes receive none. All other settings
-are preserved. Subsequent exports use version 2. Old generators that only support
-version 1 cannot import version 2 files.
+are preserved. Subsequent exports use version 3. Old generators that only support
+version 1 or 2 cannot import version 3 files.
+
+Invalid live MTU edits also block structure export before JSON serialization;
+they must never become `null` through JavaScript's NaN/Infinity serialization.
 
 ## Import and key rotation
 

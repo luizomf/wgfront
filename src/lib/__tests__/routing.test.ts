@@ -7,7 +7,7 @@ function peer(id: string, overrides: Partial<Peer> = {}): Peer {
   return {
     id, name: id, label: id, lanIp: '', publicEndpointIp: '', wgOctet: Number(id),
     keys: { privateKey: 'test-private', publicKey: `test-public-${id}` },
-    role: 'hub', gatewayId: '', fullTunnel: false, dns: null, natGateway: false, natInterface: 'eth0',
+    role: 'hub', gatewayId: '', fullTunnel: false, dns: null, mtu: null, natGateway: false, natInterface: 'eth0',
     ...overrides,
   };
 }

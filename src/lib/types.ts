@@ -17,6 +17,8 @@ export interface Peer {
   role: PeerRole;
   fullTunnel: boolean;
   dns: string | null;
+  /** null is automatic; NaN preserves malformed live edits and must never be serialized. */
+  mtu: number | null;
   gatewayId: string;
   natGateway: boolean;
   natInterface: string;

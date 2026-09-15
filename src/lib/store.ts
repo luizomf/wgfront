@@ -79,6 +79,7 @@ export async function addPeer(): Promise<void> {
     role: state.peers.length === 0 ? 'hub' : 'spoke',
     fullTunnel: false,
     dns: null,
+    mtu: null,
     gatewayId: '',
     natGateway: false,
     natInterface: 'eth0',
