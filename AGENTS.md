@@ -17,6 +17,14 @@ Use the existing category labels and configured state mappings. See `docs/agents
 
 This is a single-context repository. See `docs/agents/domain.md`.
 
+### Git worktrees
+
+Create new Git worktrees only under
+`~/sannux-data/worktrees/<repo>/<worktree_name>`, never inside the checkout or
+in its sibling directories. This central root is host-local and excluded by
+`synchosts`; transfer a worktree explicitly when another host needs it. Do not
+relocate existing worktrees solely to apply this rule.
+
 ### Delegation models
 
 Before a model-selectable delegation, read [model-routing](../omskills/skills/productivity/model-routing/SKILL.md)
