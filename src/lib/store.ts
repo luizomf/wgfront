@@ -88,6 +88,7 @@ export async function addPeer(): Promise<void> {
     fullTunnel: false,
     dns: null,
     mtu: null,
+    extraAllowedIPs: [],
     gatewayId: '',
     natGateway: false,
     natInterface: 'eth0',

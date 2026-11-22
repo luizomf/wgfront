@@ -5,8 +5,8 @@ import { DEFAULT_DNS } from '../dns';
 
 const network: NetworkConfig = { usePsk: false, dns: DEFAULT_DNS, subnet: '10.100.0', port: 51820, keepalive: 25, topology: 'hybrid', gatewayId: '8' };
 const peers: Peer[] = [
-  { id: '8', name: 'exit', label: 'Exit server', lanIp: '', publicEndpointIp: 'vpn.example.com', wgOctet: 8, role: 'hub', fullTunnel: false, dns: null, mtu: null, gatewayId: '', natGateway: true, natInterface: 'eth0', keys: { privateKey: 'PRIVATE_SECRET', publicKey: 'PUBLIC_SECRET' } },
-  { id: '108', name: 'client', label: 'Client', lanIp: '192.168.0.108', publicEndpointIp: '', wgOctet: 108, role: 'spoke', fullTunnel: true, dns: null, mtu: null, gatewayId: '8', natGateway: false, natInterface: '', keys: { privateKey: 'PRIVATE_CLIENT', publicKey: 'PUBLIC_CLIENT' } },
+  { id: '8', name: 'exit', label: 'Exit server', lanIp: '', publicEndpointIp: 'vpn.example.com', wgOctet: 8, role: 'hub', fullTunnel: false, dns: null, mtu: null, extraAllowedIPs: [], gatewayId: '', natGateway: true, natInterface: 'eth0', keys: { privateKey: 'PRIVATE_SECRET', publicKey: 'PUBLIC_SECRET' } },
+  { id: '108', name: 'client', label: 'Client', lanIp: '192.168.0.108', publicEndpointIp: '', wgOctet: 108, role: 'spoke', fullTunnel: true, dns: null, mtu: null, extraAllowedIPs: [], gatewayId: '8', natGateway: false, natInterface: '', keys: { privateKey: 'PRIVATE_CLIENT', publicKey: 'PUBLIC_CLIENT' } },
 ];
 
 function document(): any {
@@ -17,7 +17,7 @@ describe('structure format', () => {
   it('round-trips all network and peer settings, without any key material', () => {
     const json = exportStructure(network, peers);
     expect(json).not.toMatch(/keys|privateKey|publicKey|PRIVATE_|PUBLIC_/);
-    expect(parseStructure(json)).toEqual({ version: 4, network, peers: peers.map(({ keys, ...peer }) => peer) });
+    expect(parseStructure(json)).toEqual({ version: 5, network, peers: peers.map(({ keys, ...peer }) => peer) });
   });
 
   it('migrates version 1 with the exact original full-tunnel DNS defaults', () => {
@@ -25,7 +25,7 @@ describe('structure format', () => {
     legacy.version = 1;
     delete legacy.network.usePsk;
     delete legacy.network.dns;
-    legacy.peers.forEach((peer: any) => { delete peer.dns; delete peer.mtu; });
+    legacy.peers.forEach((peer: any) => { delete peer.dns; delete peer.mtu; delete peer.extraAllowedIPs; });
     const parsed = parseStructure(JSON.stringify(legacy));
     expect(parsed).toEqual(parseStructure(exportStructure(network, peers)));
     expect(parsed.network.dns).toBe(DEFAULT_DNS);
@@ -65,7 +65,7 @@ describe('structure format', () => {
   });
 
   it.each([
-    (d: any) => { d.version = 5; },
+    (d: any) => { d.version = 6; },
     (d: any) => { delete d.network.dns; },
     (d: any) => { delete d.peers[0].dns; },
     (d: any) => { d.network.dns = null; },
@@ -100,5 +100,60 @@ describe('structure format', () => {
 
   it('rejects oversized input before JSON parsing', () => {
     expect(() => parseStructure(' '.repeat(MAX_STRUCTURE_BYTES + 1))).toThrow('1 MB');
+  });
+});
+
+describe('extra AllowedIPs in the structure', () => {
+  const withExtras = peers.map((peer) => peer.id === '108'
+    ? { ...peer, extraAllowedIPs: ['192.168.0.108/32', '2001:db8:108::/48'] }
+    : peer);
+
+  it('round-trips the extras in version 5', () => {
+    const json = exportStructure(network, withExtras);
+    const parsed = parseStructure(json);
+    expect(parsed.version).toBe(5);
+    expect(parsed.peers.find((peer) => peer.id === '108')?.extraAllowedIPs)
+      .toEqual(['192.168.0.108/32', '2001:db8:108::/48']);
+  });
+
+  it.each([1, 2, 3, 4])('imports version %i with empty extras', (version) => {
+    const data = JSON.parse(exportStructure(network, withExtras));
+    data.version = version;
+    if (version < 4) delete data.network.usePsk;
+    if (version === 1) delete data.network.dns;
+    for (const peer of data.peers) {
+      delete peer.extraAllowedIPs;
+      if (version < 3) delete peer.mtu;
+      if (version === 1) delete peer.dns;
+    }
+    expect(parseStructure(JSON.stringify(data)).peers.every((peer) => peer.extraAllowedIPs.length === 0)).toBe(true);
+  });
+
+  it('rejects extras in a version 4 document', () => {
+    const data = JSON.parse(exportStructure(network, withExtras));
+    data.version = 4;
+    expect(() => parseStructure(JSON.stringify(data))).toThrow(/campos/);
+  });
+
+  it('requires extras in version 5', () => {
+    const data = JSON.parse(exportStructure(network, withExtras));
+    delete data.peers[0].extraAllowedIPs;
+    expect(() => parseStructure(JSON.stringify(data))).toThrow(/campos/);
+  });
+
+  it.each([
+    [['192.168.0.108']],
+    [['10.100.0.5/32']],
+    [['192.168.0.0/24', '192.168.0.108/32']],
+    ['192.168.0.108/32'],
+  ])('rejects invalid extras %j', (extras) => {
+    const data = JSON.parse(exportStructure(network, withExtras));
+    data.peers[1].extraAllowedIPs = extras;
+    expect(() => parseStructure(JSON.stringify(data))).toThrow(/rotas extras/);
+  });
+
+  it('refuses to export invalid extras', () => {
+    const broken = withExtras.map((peer) => ({ ...peer, extraAllowedIPs: ['nope'] }));
+    expect(() => exportStructure(network, broken)).toThrow();
   });
 });

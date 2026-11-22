@@ -1,6 +1,7 @@
 import type { NetworkConfig, Peer } from './types';
 import { getDnsServers } from './dns';
 import { validateMtu } from './mtu';
+import { cidrRange, parseCidr, validateExtraAllowedIps, type Cidr } from './allowed-ips';
 
 export interface RoutingIssue {
   peerId: string;
@@ -33,6 +34,7 @@ function gatewayId(self: Peer, network: NetworkConfig): string {
 
 export function validateRouting(peers: Peer[], network: NetworkConfig): RoutingIssue[] {
   const issues: RoutingIssue[] = [];
+  const invalidExtras = new Set<string>();
 
   for (const self of peers) {
     try { validateMtu(self.mtu); }
@@ -42,6 +44,11 @@ export function validateRouting(peers: Peer[], network: NetworkConfig): RoutingI
     try { getDnsServers(self, network); }
     catch (error) {
       issues.push({ peerId: self.id, message: error instanceof Error ? error.message : 'DNS inválido.' });
+    }
+    try { validateExtraAllowedIps(self.extraAllowedIPs, network.subnet); }
+    catch (error) {
+      invalidExtras.add(self.id);
+      issues.push({ peerId: self.id, message: error instanceof Error ? error.message : 'Rotas extras inválidas.' });
     }
     const candidates = getGatewayCandidates(self, peers, network);
     if (!requiresGateway(self, network)) {
@@ -73,6 +80,49 @@ export function validateRouting(peers: Peer[], network: NetworkConfig): RoutingI
     }
   }
 
+  issues.push(...validateExtraOverlaps(peers, network, invalidExtras));
+  return issues;
+}
+
+/** Extras that `peer`'s block carries in `self`'s config; a full-tunnel exit already routes everything. */
+function extrasFor(self: Peer, peer: Peer, network: NetworkConfig): string[] {
+  return self.fullTunnel && peer.id === gatewayId(self, network) ? [] : peer.extraAllowedIPs;
+}
+
+/**
+ * WireGuard silently gives an address to the last peer that claims it, so reject clashes
+ * per generated config. Prefixes are nested or disjoint, so after sorting by start each
+ * entry only needs comparing with the widest earlier one.
+ */
+function validateExtraOverlaps(peers: Peer[], network: NetworkConfig, skip: Set<string>): RoutingIssue[] {
+  const issues: RoutingIssue[] = [];
+  const reported = new Set<string>();
+  for (const self of peers) {
+    const claimed: { peer: Peer; cidr: Cidr; start: bigint; end: bigint }[] = [];
+    for (const peer of getGatewayCandidates(self, peers, network)) {
+      if (skip.has(peer.id)) continue;
+      for (const entry of extrasFor(self, peer, network)) {
+        const cidr = parseCidr(entry);
+        const [start, end] = cidrRange(cidr);
+        claimed.push({ peer, cidr, start, end });
+      }
+    }
+    claimed.sort((a, b) => a.cidr.version - b.cidr.version || (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+    let widest: (typeof claimed)[number] | undefined;
+    for (const current of claimed) {
+      if (widest && widest.cidr.version === current.cidr.version && current.start <= widest.end) {
+        const key = `${current.peer.id}|${current.cidr.text}`;
+        if (!reported.has(key)) {
+          reported.add(key);
+          issues.push({
+            peerId: current.peer.id,
+            message: `Rota extra ${current.cidr.text} sobrepõe ${widest.cidr.text} de ${widest.peer.name} na configuração de ${self.name}.`,
+          });
+        }
+      }
+      if (!widest || widest.cidr.version !== current.cidr.version || current.end > widest.end) widest = current;
+    }
+  }
   return issues;
 }
 
@@ -92,14 +142,15 @@ export function planPeerRoutes(
 
   const targetId = gatewayId(self, network);
   return getGatewayCandidates(self, peers, network).map((peer) => {
-    let allowedIPs = [`${network.subnet}.${peer.wgOctet}/32`, `fd10:100::${peer.wgOctet}/128`];
+    let [ipv4, ipv6] = [`${network.subnet}.${peer.wgOctet}/32`, `fd10:100::${peer.wgOctet}/128`];
     if (peer.id === targetId) {
       if (self.fullTunnel) {
-        allowedIPs = ['0.0.0.0/0', '::/0'];
-      } else if (network.topology === 'hub-spoke' && self.role === 'spoke') {
-        allowedIPs = [`${network.subnet}.0/24`, 'fd10:100::/64'];
+        return { peer, allowedIPs: ['0.0.0.0/0', '::/0'] };
+      }
+      if (network.topology === 'hub-spoke' && self.role === 'spoke') {
+        [ipv4, ipv6] = [`${network.subnet}.0/24`, 'fd10:100::/64'];
       }
     }
-    return { peer, allowedIPs };
+    return { peer, allowedIPs: [ipv4, ...extrasFor(self, peer, network), ipv6] };
   });
 }

@@ -16,7 +16,8 @@ No server. No tracking. Just math.
 - **Configurable DNS** — keep the existing full-tunnel defaults, choose network-wide IPv4/IPv6 resolvers, or override/omit DNS per node
 - **Optional automatic PSK** — off by default; one browser-generated extra symmetric key per direct connection, matching in both directions
 - **Optional per-node MTU** — automatic by default; explicit dual-stack overrides from 1280 to 65535
-- **Config validation** — invalid gateway selections, circular internet exits, invalid effective DNS, and invalid MTU block config preview and export
+- **Extra AllowedIPs per node** — route extra networks (e.g. a node's LAN address) to it from the peers that connect to it
+- **Config validation** — invalid gateway selections, circular internet exits, invalid effective DNS, invalid MTU, and invalid or overlapping extra AllowedIPs block config preview and export
 - **Structure import/export** — versioned JSON containing nodes and routing settings, never keys; import generates fresh keys for rotation
 - **One-click example** — load a fictitious, fully populated network with fresh keys to explore routing and exports
 - **Dual-stack IPv6** — ULA addresses (`fd10:100::X`) alongside IPv4
@@ -120,7 +121,7 @@ public keys on all affected machines. With PSK enabled, import also creates fres
 pair secrets: install the matching generated configs at both ends of every
 connection. Exporting the JSON does not rotate keys.
 
-The [version 4 format reference](docs/structure-format.md) includes an example and
+The [version 5 format reference](docs/structure-format.md) includes an example and
 field constraints for tools or infrastructure agents. This is a network blueprint,
 not an executable deployment plan. Share carefully: it still contains hostnames,
 IP addresses, and topology. It is not a backup of your current cryptographic keys.
@@ -139,7 +140,7 @@ search domains, or DoH URLs. The tool validates syntax locally, not reachability
 It does not install a DNS server or add routes to reach your chosen resolvers;
 check their reachability and the routes they will use, especially in split tunnel.
 
-Structure exports use version 4 and retain these choices without keys.
+Structure exports use version 5 and retain these choices without keys.
 Version 1 files still import with the exact original DNS defaults and behavior;
 version 2 files preserve their DNS choices.
 
@@ -197,7 +198,7 @@ PSKs prevent the connection from working. Coordinate that rollout yourself.
 Secrets exist only in browser memory and explicitly generated configs/ZIPs or
 copies. No storage, logging, upload, external key service, or random fallback is
 used. Preview, individual downloads, clipboard copies, and ZIPs use the same
-pair secrets. Structure v4 stores only `network.usePsk`; v1/v2/v3 imports default
+pair secrets. Structures v4/v5 store only `network.usePsk`; v1/v2/v3 imports default
 to PSK off and retain their historical DNS and MTU migrations.
 
 ## Hybrid Example

@@ -227,6 +227,7 @@ describe('atomic PSK editor state', () => {
     const data = JSON.parse(EXAMPLE_STRUCTURE_JSON);
     data.version = 3;
     delete data.network.usePsk;
+    for (const peer of data.peers) delete peer.extraAllowedIPs;
     await store.importStructure(JSON.stringify(data));
     expect(store.getState().network.usePsk).toBe(false);
     expect(store.getState().pairKeys.size).toBe(0);

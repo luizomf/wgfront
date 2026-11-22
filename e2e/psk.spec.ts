@@ -212,7 +212,7 @@ test('regeneration/import rotate both key types together; entropy and X25519 fai
   await load(page);
   await page.locator('#network-psk').check();
   const saved = (await download(page, '#export-structure-btn')).toString();
-  expect(JSON.parse(saved).version).toBe(4);
+  expect(JSON.parse(saved).version).toBe(5);
   expect(JSON.parse(saved).network.usePsk).toBe(true);
   expect(saved).not.toMatch(/privateKey|publicKey|presharedKey|pairKeys|"keys"/);
   let before = await previews(page);
@@ -281,6 +281,7 @@ test('strict legacy v3 disables PSK while preserving DNS and MTU; v4 restores en
   const legacy = JSON.parse(EXAMPLE_STRUCTURE_JSON);
   legacy.version = 3;
   delete legacy.network.usePsk;
+  for (const peer of legacy.peers) delete peer.extraAllowedIPs;
   legacy.network.dns = '9.9.9.9';
   legacy.peers[3].mtu = 1420;
   page.once('dialog', (dialog) => dialog.accept());

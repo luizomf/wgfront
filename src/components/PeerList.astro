@@ -52,6 +52,7 @@
   import { getGatewayCandidates } from '../lib/routing';
   import { getDnsServers } from '../lib/dns';
   import { MTU_HELP, parseMtuInput, validateMtu } from '../lib/mtu';
+  import { EXTRA_ALLOWED_IPS_HELP, parseExtraAllowedIpsInput, validateExtraAllowedIps } from '../lib/allowed-ips';
 
   const container = document.getElementById('peers-container')!;
   const emptyMsg = document.getElementById('peers-empty')!;
@@ -134,6 +135,12 @@
         <p class="peer-card__help text-secondary" id="peer-mtu-help-${peer.id}"></p>
         <p class="peer-card__help text-secondary">Só ajusta o túnel: não altera o MTU do Docker nem corrige a descoberta de MTU do caminho.</p>
       </div>
+      <div class="peer-card__extras peer-card__field">
+        <label for="peer-extras-${peer.id}">Rotas extras (AllowedIPs)</label>
+        <input type="text" id="peer-extras-${peer.id}" data-field="extraAllowedIPs"
+          aria-describedby="peer-extras-help-${peer.id}" placeholder="Ex.: 192.168.0.10/32" spellcheck="false" />
+        <p class="peer-card__help text-secondary" id="peer-extras-help-${peer.id}"></p>
+      </div>
       <div class="peer-card__footer">
         <div class="peer-card__options">
           <label class="peer-card__check">
@@ -177,6 +184,7 @@
       input.addEventListener('input', () => {
         const field = input.dataset.field!;
         const value = field === 'mtu' ? parseMtuInput(input.value)
+          : field === 'extraAllowedIPs' ? parseExtraAllowedIpsInput(input.value)
           : field === 'wgOctet' ? parseInt(input.value, 10) : input.value;
         updatePeer(peer.id, { [field]: value } as Partial<Peer>);
       });
@@ -305,6 +313,20 @@
     }
   }
 
+  function renderExtraAllowedIps(card: HTMLElement, peer: Peer, network: NetworkConfig): void {
+    const input = card.querySelector<HTMLInputElement>('input[data-field="extraAllowedIPs"]')!;
+    const help = card.querySelector<HTMLElement>('.peer-card__extras .peer-card__help')!;
+    if (input !== document.activeElement) input.value = peer.extraAllowedIPs.join(', ');
+    try {
+      validateExtraAllowedIps(peer.extraAllowedIPs, network.subnet);
+      input.setAttribute('aria-invalid', 'false');
+      help.textContent = EXTRA_ALLOWED_IPS_HELP;
+    } catch (error) {
+      input.setAttribute('aria-invalid', 'true');
+      help.textContent = error instanceof Error ? error.message : 'Rotas extras inválidas.';
+    }
+  }
+
   function render(): void {
     const { peers, network } = getState();
     emptyMsg.hidden = peers.length > 0;
@@ -356,6 +378,7 @@
       renderGateway(card, peer, peers, network);
       renderDns(card, peer, network);
       renderMtu(card, peer);
+      renderExtraAllowedIps(card, peer, network);
     }
   }
 
@@ -396,6 +419,7 @@
 
   .peer-card__gateway,
   .peer-card__mtu,
+  .peer-card__extras,
   .peer-card__dns {
     margin-top: 0.75rem;
   }
@@ -417,6 +441,7 @@
   }
 
   .peer-card__mtu input[aria-invalid="true"],
+  .peer-card__extras input[aria-invalid="true"],
   .peer-card__gateway select[aria-invalid="true"],
   .peer-card__dns input[aria-invalid="true"] {
     border-color: var(--danger);
