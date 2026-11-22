@@ -1,4 +1,4 @@
-# WireGuard structure format (version 4)
+# WireGuard structure format (version 5)
 
 A structure file describes the editor's nodes and routing choices. It is not a
 WireGuard `.conf`, a key backup, or a deployment script. It can be shared with an
@@ -8,7 +8,7 @@ infrastructure agent as input, subject to the privacy warning below.
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "network": {
     "usePsk": false,
     "dns": "1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001",
@@ -30,6 +30,7 @@ infrastructure agent as input, subject to the privacy warning below.
       "fullTunnel": false,
       "dns": null,
       "mtu": null,
+      "extraAllowedIPs": [],
       "gatewayId": "",
       "natGateway": true,
       "natInterface": "eth0"
@@ -45,6 +46,7 @@ infrastructure agent as input, subject to the privacy warning below.
       "fullTunnel": true,
       "dns": null,
       "mtu": null,
+      "extraAllowedIPs": [],
       "gatewayId": "",
       "natGateway": false,
       "natInterface": "eth0"
@@ -62,9 +64,9 @@ All illustrated fields are required. Unknown fields, including `keys`,
 `privateKey`, `publicKey`, preshared keys, and executable hooks, are rejected.
 Export uses an explicit allowlist: cryptographic keys are never included.
 
-- `version`: integer `4` for new exports. Version `1`, `2`, and `3` imports are
-  migrated as described below; other versions are rejected.
-- `network.usePsk`: boolean, required in v4 and absent in older versions. Defaults
+- `version`: integer `5` for new exports. Version `1`–`4` imports are migrated
+  as described below; other versions are rejected.
+- `network.usePsk`: boolean, required in v4/v5 and absent in older versions. Defaults
   to `false` in the editor and legacy imports. When `true`, generate an extra
   random 32-byte/base64 PSK for each directly connected unordered pair. The same
   key goes into both matching Peer blocks; different pairs have independent
@@ -99,12 +101,22 @@ Export uses an explicit allowlist: cryptographic keys are never included.
   `""` explicitly omits the `DNS =` line, keeping system DNS settings. This does
   not change routes or configure a DNS server; verify resolver reachability.
 - `mtu`: `null` for automatic MTU (omit `MTU =`, letting `wg-quick` choose it),
-  or an integer from 1280 to 65535 inclusive. Required in v3/v4, absent in v1/v2.
+  or an integer from 1280 to 65535 inclusive. Required in v3–v5, absent in v1/v2.
   Strings, fractions, booleans, and out-of-range values are rejected, never coerced.
   An override adds one `MTU = <value>` in this node's `[Interface]` only. The minimum
   supports the generator's always-dual-stack configs; the range does not guarantee
   suitability for a particular path. Tunnel MTU does not itself reconfigure Docker
   MTUs or repair path-MTU discovery. DNS, routing, NAT, and keys are unaffected.
+- `extraAllowedIPs`: list of extra IPv4/IPv6 networks in CIDR form (for example
+  the node's LAN address, `192.168.0.10/32`), at most 64, required in v5 and absent
+  in older versions. Host bits must be zero, and entries may not overlap each other
+  or the WireGuard subnets (`<subnet>.0/24`, `fd10:100::/64`). They are appended,
+  between the node's two WireGuard addresses, to `AllowedIPs` of this node's Peer
+  block in every config that connects to it directly (hubs, mesh peers). A
+  full-tunnel exit route (`0.0.0.0/0, ::/0`) is left unchanged; a hub-spoke
+  subnet route keeps its subnet and gains the hub's extras. Extras of different
+  nodes may not overlap inside the same generated config: WireGuard would
+  silently give the address to the last Peer block. Not secret; saved as is.
 - `gatewayId`: per-node override, or `""` to inherit `network.gatewayId`.
 - `natGateway`: boolean. Generates Linux forwarding/NAT hooks; does not select
   anyone's gateway or grant permission to configure a real machine.
@@ -116,7 +128,12 @@ Dangling or missing gateway references are permitted as unfinished drafts, but
 config preview/download remain blocked until routing is valid. See the
 [README routing table](../README.md#connections-versus-routing) for semantics.
 
-## Version 1, 2, and 3 compatibility
+## Version 1–4 compatibility
+
+Version 4 has the same fields as v5 except each node's `extraAllowedIPs`, which
+must be absent. Import supplies an empty list for every node, so routes are
+unchanged.
+
 
 All v1/v2/v3 imports require `network.usePsk` to be absent and supply `false`.
 Version 3 otherwise has the same fields as v4: DNS and MTU choices are preserved.
@@ -131,8 +148,8 @@ absent. Each node receives `mtu: null`. Import supplies the original default
 `1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001` and sets every
 node's `dns` to `null`. This preserves the original behavior: full-tunnel nodes
 receive that exact DNS line; split-tunnel nodes receive none. All other settings
-are preserved. Subsequent exports use version 4. Old generators that only support
-version 1, 2, or 3 cannot import version 4 files.
+are preserved. Subsequent exports use version 5. Old generators that only support
+versions 1–4 cannot import version 5 files.
 
 Invalid live MTU edits also block structure export before JSON serialization;
 they must never become `null` through JavaScript's NaN/Infinity serialization.
