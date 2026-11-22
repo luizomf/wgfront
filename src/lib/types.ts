@@ -19,6 +19,8 @@ export interface Peer {
   dns: string | null;
   /** null is automatic; NaN preserves malformed live edits and must never be serialized. */
   mtu: number | null;
+  /** Extra networks routed to this peer by the peers connected to it; empty by default. */
+  extraAllowedIPs: string[];
   gatewayId: string;
   natGateway: boolean;
   natInterface: string;

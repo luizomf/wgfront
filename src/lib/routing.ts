@@ -1,6 +1,7 @@
 import type { NetworkConfig, Peer } from './types';
 import { getDnsServers } from './dns';
 import { validateMtu } from './mtu';
+import { cidrsOverlap, parseCidr, validateExtraAllowedIps, type Cidr } from './allowed-ips';
 
 export interface RoutingIssue {
   peerId: string;
@@ -33,6 +34,7 @@ function gatewayId(self: Peer, network: NetworkConfig): string {
 
 export function validateRouting(peers: Peer[], network: NetworkConfig): RoutingIssue[] {
   const issues: RoutingIssue[] = [];
+  let extrasValid = true;
 
   for (const self of peers) {
     try { validateMtu(self.mtu); }
@@ -42,6 +44,11 @@ export function validateRouting(peers: Peer[], network: NetworkConfig): RoutingI
     try { getDnsServers(self, network); }
     catch (error) {
       issues.push({ peerId: self.id, message: error instanceof Error ? error.message : 'DNS inválido.' });
+    }
+    try { validateExtraAllowedIps(self.extraAllowedIPs, network.subnet); }
+    catch (error) {
+      extrasValid = false;
+      issues.push({ peerId: self.id, message: error instanceof Error ? error.message : 'Rotas extras inválidas.' });
     }
     const candidates = getGatewayCandidates(self, peers, network);
     if (!requiresGateway(self, network)) {
@@ -73,6 +80,38 @@ export function validateRouting(peers: Peer[], network: NetworkConfig): RoutingI
     }
   }
 
+  if (extrasValid) issues.push(...validateExtraOverlaps(peers, network));
+  return issues;
+}
+
+/** Whether `peer`'s block in `self`'s config carries its extras (a full-tunnel exit already routes everything). */
+function carriesExtras(self: Peer, peer: Peer, network: NetworkConfig): boolean {
+  return !(self.fullTunnel && peer.id === gatewayId(self, network));
+}
+
+/** WireGuard silently gives an address to the last peer that claims it, so reject clashes per generated config. */
+function validateExtraOverlaps(peers: Peer[], network: NetworkConfig): RoutingIssue[] {
+  const issues: RoutingIssue[] = [];
+  const reported = new Set<string>();
+  for (const self of peers) {
+    const claimed: { peer: Peer; cidr: Cidr }[] = [];
+    for (const peer of getGatewayCandidates(self, peers, network)) {
+      if (!carriesExtras(self, peer, network)) continue;
+      for (const entry of peer.extraAllowedIPs) {
+        const cidr = parseCidr(entry);
+        const clash = claimed.find((other) => other.peer.id !== peer.id && cidrsOverlap(other.cidr, cidr));
+        const key = `${peer.id}|${entry}`;
+        if (clash && !reported.has(key)) {
+          reported.add(key);
+          issues.push({
+            peerId: peer.id,
+            message: `Rota extra ${entry} sobrepõe ${clash.cidr.text} de ${clash.peer.name} na configuração de ${self.name}.`,
+          });
+        }
+        claimed.push({ peer, cidr });
+      }
+    }
+  }
   return issues;
 }
 
@@ -92,14 +131,15 @@ export function planPeerRoutes(
 
   const targetId = gatewayId(self, network);
   return getGatewayCandidates(self, peers, network).map((peer) => {
-    let allowedIPs = [`${network.subnet}.${peer.wgOctet}/32`, `fd10:100::${peer.wgOctet}/128`];
+    let [ipv4, ipv6] = [`${network.subnet}.${peer.wgOctet}/32`, `fd10:100::${peer.wgOctet}/128`];
     if (peer.id === targetId) {
       if (self.fullTunnel) {
-        allowedIPs = ['0.0.0.0/0', '::/0'];
-      } else if (network.topology === 'hub-spoke' && self.role === 'spoke') {
-        allowedIPs = [`${network.subnet}.0/24`, 'fd10:100::/64'];
+        return { peer, allowedIPs: ['0.0.0.0/0', '::/0'] };
+      }
+      if (network.topology === 'hub-spoke' && self.role === 'spoke') {
+        [ipv4, ipv6] = [`${network.subnet}.0/24`, 'fd10:100::/64'];
       }
     }
-    return { peer, allowedIPs };
+    return { peer, allowedIPs: [ipv4, ...peer.extraAllowedIPs, ipv6] };
   });
 }

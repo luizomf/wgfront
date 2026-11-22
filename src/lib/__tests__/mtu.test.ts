@@ -85,13 +85,13 @@ describe('MTU configs and persistence', () => {
     }
   });
 
-  it('retains independent null and boundary overrides in key-free v4', () => {
+  it('retains independent null and boundary overrides in the key-free structure', () => {
     const { network, peers } = fixture();
     peers[0].mtu = 1280;
     peers[1].mtu = 65535;
     const json = exportStructure(network, peers);
     expect(json).not.toMatch(/private-|public-|"keys"/);
-    expect(parseStructure(json)).toEqual({ version: 4, network, peers: peers.map(({ keys, ...peer }) => peer) });
+    expect(parseStructure(json)).toEqual({ version: 5, network, peers: peers.map(({ keys, ...peer }) => peer) });
   });
 
   it.each([1, 2])('migrates v%s to automatic without changing historical DNS or other fields', (version) => {
@@ -104,13 +104,14 @@ describe('MTU configs and persistence', () => {
     if (version === 1) delete data.network.dns;
     for (const peer of data.peers) {
       delete peer.mtu;
+      delete peer.extraAllowedIPs;
       if (version === 1) delete peer.dns;
     }
     const result = parseStructure(JSON.stringify(data));
-    expect(result.version).toBe(4);
+    expect(result.version).toBe(5);
     expect(result.network).toEqual({ ...data.network, usePsk: false, dns: version === 1 ? DEFAULT_DNS : '9.9.9.9' });
     expect(result.peers).toEqual(data.peers.map((peer: object) => ({
-      ...peer, mtu: null, ...(version === 1 ? { dns: null } : {}),
+      ...peer, mtu: null, extraAllowedIPs: [], ...(version === 1 ? { dns: null } : {}),
     })));
     const peers = result.peers.map((peer) => ({ ...peer, keys: { privateKey: 'private', publicKey: 'public' } }));
     expect(parseStructure(exportStructure(result.network, peers))).toEqual(result);

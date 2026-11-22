@@ -2,11 +2,12 @@ import type { NetworkConfig, Peer } from './types';
 import { isValidIp, isValidOctet, isValidPort, isValidSubnet } from './validators';
 import { DEFAULT_DNS, parseDnsServers } from './dns';
 import { validateMtu } from './mtu';
+import { validateExtraAllowedIps } from './allowed-ips';
 
 export const MAX_STRUCTURE_BYTES = 1_000_000;
 
 export interface NetworkStructure {
-  version: 4;
+  version: 5;
   network: NetworkConfig;
   peers: Omit<Peer, 'keys'>[];
 }
@@ -53,7 +54,7 @@ export function exportStructure(network: NetworkConfig, peers: Peer[]): string {
   // JSON.stringify converts NaN/Infinity to null: reject invalid edits before serialization.
   for (const peer of peers) validateMtu(peer.mtu);
   const structure: NetworkStructure = {
-    version: 4,
+    version: 5,
     network: {
       usePsk: network.usePsk,
       dns: network.dns,
@@ -64,6 +65,7 @@ export function exportStructure(network: NetworkConfig, peers: Peer[]): string {
       id: peer.id, name: peer.name, label: peer.label, lanIp: peer.lanIp,
       publicEndpointIp: peer.publicEndpointIp, wgOctet: peer.wgOctet,
       role: peer.role, fullTunnel: peer.fullTunnel, gatewayId: peer.gatewayId, dns: peer.dns, mtu: peer.mtu,
+      extraAllowedIPs: [...peer.extraAllowedIPs],
       natGateway: peer.natGateway, natInterface: peer.natInterface,
     })),
   };
@@ -78,10 +80,11 @@ export function parseStructure(json: string): NetworkStructure {
   let parsed: unknown;
   try { parsed = JSON.parse(json); } catch { invalid('JSON não reconhecido'); }
   const root = object(parsed, ['version', 'network', 'peers']);
-  if (root.version !== 1 && root.version !== 2 && root.version !== 3 && root.version !== 4) invalid('versão não suportada');
+  if (![1, 2, 3, 4, 5].includes(root.version as number)) invalid('versão não suportada');
+  const version = root.version as 1 | 2 | 3 | 4 | 5;
   const legacy = root.version === 1;
-  const network = object(root.network, ['subnet', 'port', 'keepalive', 'topology', 'gatewayId', ...(legacy ? [] : ['dns']), ...(root.version === 4 ? ['usePsk'] : [])]);
-  if (root.version !== 4) network.usePsk = false;
+  const network = object(root.network, ['subnet', 'port', 'keepalive', 'topology', 'gatewayId', ...(legacy ? [] : ['dns']), ...(version >= 4 ? ['usePsk'] : [])]);
+  if (version < 4) network.usePsk = false;
   if (typeof network.usePsk !== 'boolean') invalid('opção PSK');
   if (legacy) network.dns = DEFAULT_DNS;
   validateDns(network.dns, 'DNS da rede');
@@ -95,9 +98,12 @@ export function parseStructure(json: string): NetworkStructure {
   const octets = new Set<number>();
   const names = new Set<string>();
   const peers = root.peers.map((value) => {
-    const peer = object(value, ['id', 'name', 'label', 'lanIp', 'publicEndpointIp', 'wgOctet', 'role', 'fullTunnel', 'gatewayId', 'natGateway', 'natInterface', ...(legacy ? [] : ['dns']), ...(root.version === 3 || root.version === 4 ? ['mtu'] : [])]);
-    if (root.version === 1 || root.version === 2) peer.mtu = null;
+    const peer = object(value, ['id', 'name', 'label', 'lanIp', 'publicEndpointIp', 'wgOctet', 'role', 'fullTunnel', 'gatewayId', 'natGateway', 'natInterface', ...(legacy ? [] : ['dns']), ...(version >= 3 ? ['mtu'] : []), ...(version >= 5 ? ['extraAllowedIPs'] : [])]);
+    if (version < 3) peer.mtu = null;
+    if (version < 5) peer.extraAllowedIPs = [];
     try { validateMtu(peer.mtu); } catch { invalid('MTU do nó (use null ou inteiro de 1280 a 65535)'); }
+    try { validateExtraAllowedIps(peer.extraAllowedIPs, network.subnet as string); }
+    catch (error) { invalid(`rotas extras do nó (${error instanceof Error ? error.message : 'inválidas'})`); }
     if (legacy) peer.dns = null;
     if (peer.dns !== null) validateDns(peer.dns, 'DNS do nó');
     const peerId = id(peer.id);
@@ -118,5 +124,5 @@ export function parseStructure(json: string): NetworkStructure {
     return peer as unknown as Omit<Peer, 'keys'>;
   });
   // Unresolved gateways are valid drafts; routing validation still blocks config exports.
-  return { version: 4, network: network as unknown as NetworkConfig, peers };
+  return { version: 5, network: network as unknown as NetworkConfig, peers };
 }

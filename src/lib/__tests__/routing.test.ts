@@ -7,7 +7,7 @@ function peer(id: string, overrides: Partial<Peer> = {}): Peer {
   return {
     id, name: id, label: id, lanIp: '', publicEndpointIp: '', wgOctet: Number(id),
     keys: { privateKey: 'test-private', publicKey: `test-public-${id}` },
-    role: 'hub', gatewayId: '', fullTunnel: false, dns: null, mtu: null, natGateway: false, natInterface: 'eth0',
+    role: 'hub', gatewayId: '', fullTunnel: false, dns: null, mtu: null, extraAllowedIPs: [], natGateway: false, natInterface: 'eth0',
     ...overrides,
   };
 }
@@ -90,5 +90,66 @@ describe('gateway candidates', () => {
 
   it('ignores roles in mesh but still excludes self', () => {
     expect(getGatewayCandidates(client, peers, { ...network, topology: 'mesh' })).toEqual([hub, otherClient]);
+  });
+});
+
+describe('extra AllowedIPs', () => {
+  const nas = peer('105', { role: 'spoke', fullTunnel: true, extraAllowedIPs: ['192.168.0.105/32'] });
+  const routesTo = (self: Peer, peers: Peer[], config: NetworkConfig, target: Peer) =>
+    planPeerRoutes(self, peers, config).find((route) => route.peer.id === target.id)?.allowedIPs;
+
+  it('appends a peer\'s extras to its block on the hub, between its WireGuard addresses', () => {
+    expect(routesTo(hub, [hub, nas], network, nas)).toEqual([
+      '10.100.0.105/32', '192.168.0.105/32', 'fd10:100::105/128',
+    ]);
+  });
+
+  it('keeps an empty list byte-identical to the default routes', () => {
+    expect(routesTo(hub, [hub, client], network, client)).toEqual(['10.100.0.108/32', 'fd10:100::108/128']);
+  });
+
+  it('does not change a full-tunnel gateway route', () => {
+    const exit = { ...hub, extraAllowedIPs: ['203.0.113.0/24'] };
+    expect(routesTo(client, [exit, client], network, exit)).toEqual(['0.0.0.0/0', '::/0']);
+  });
+
+  it('keeps the hub-spoke subnet default and adds the hub\'s extras', () => {
+    const relay = { ...hub, extraAllowedIPs: ['192.168.50.0/24'] };
+    const spoke = { ...otherClient, gatewayId: '8' };
+    const config = { ...network, topology: 'hub-spoke' as Topology };
+    expect(routesTo(spoke, [relay, spoke], config, relay)).toEqual([
+      '10.100.0.0/24', '192.168.50.0/24', 'fd10:100::/64',
+    ]);
+  });
+
+  it('adds extras on every direct peer in mesh', () => {
+    const a = peer('1', { extraAllowedIPs: ['192.168.10.0/24'] });
+    const b = peer('2');
+    const c = peer('3');
+    const config = { ...network, topology: 'mesh' as Topology, gatewayId: '' };
+    expect(routesTo(b, [a, b, c], config, a)).toContain('192.168.10.0/24');
+    expect(routesTo(c, [a, b, c], config, a)).toContain('192.168.10.0/24');
+  });
+
+  it('reports an invalid extra on its own node and blocks generation', () => {
+    const broken = { ...nas, extraAllowedIPs: ['192.168.0.105'] };
+    const issues = validateRouting([hub, broken], network);
+    expect(issues.map((issue) => issue.peerId)).toEqual(['105']);
+    expect(issues[0].message).toMatch(/192\.168\.0\.105/);
+    expect(() => planPeerRoutes(hub, [hub, broken], network)).toThrow();
+  });
+
+  it('rejects extras of different peers that overlap in the same generated config', () => {
+    const other = peer('106', { role: 'spoke', fullTunnel: true, extraAllowedIPs: ['192.168.0.0/24'] });
+    const issues = validateRouting([hub, nas, other], network);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toMatch(/sobrep/);
+    expect(() => planPeerRoutes(hub, [hub, nas, other], network)).toThrow();
+  });
+
+  it('allows the same extra on peers that never share a generated config', () => {
+    const exit = { ...hub, extraAllowedIPs: ['192.168.0.0/24'] };
+    const backup = peer('9', { extraAllowedIPs: ['192.168.0.0/24'] });
+    expect(validateRouting([exit, backup, client], network)).toEqual([]);
   });
 });

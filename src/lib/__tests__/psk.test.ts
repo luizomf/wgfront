@@ -114,7 +114,7 @@ describe('automatic pair secrets', () => {
   });
 });
 
-describe('key-free v4 structure', () => {
+describe('key-free structure', () => {
   it.each([true, false])('round-trips only the enablement choice %s, even with future secret fields', (usePsk) => {
     const { peers, network } = fixture();
     network.usePsk = usePsk;
@@ -124,7 +124,7 @@ describe('key-free v4 structure', () => {
     expect(json).not.toMatch(/SECRET|private-|public-|pairKeys|presharedKey|"keys"/);
     for (const key of pairKeys.values()) expect(json).not.toContain(key);
     const parsed = parseStructure(json);
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5);
     expect(parsed.network).toEqual(network);
     expect(JSON.parse(EXAMPLE_STRUCTURE_JSON).network.usePsk).toBe(false);
   });
@@ -138,6 +138,7 @@ describe('key-free v4 structure', () => {
     data.peers[0].dns = '';
     if (version === 1) delete data.network.dns;
     for (const peer of data.peers) {
+      delete peer.extraAllowedIPs;
       if (version < 3) delete peer.mtu;
       if (version === 1) delete peer.dns;
     }
