@@ -1,3 +1,5 @@
+import { isValidSubnet } from './validators';
+
 export const MAX_EXTRA_ALLOWED_IPS = 64;
 
 export const EXTRA_ALLOWED_IPS_HELP =
@@ -41,8 +43,31 @@ function parseIpv6(value: string): bigint | null {
   return result;
 }
 
+function formatAddress(version: 4 | 6, value: bigint): string {
+  if (version === 4) {
+    return [24n, 16n, 8n, 0n].map((shift) => String((value >> shift) & 255n)).join('.');
+  }
+  const groups = Array.from({ length: 8 }, (_, i) => Number((value >> BigInt(112 - i * 16)) & 0xffffn));
+  let best = { start: -1, length: 1 };
+  for (let start = 0; start < 8;) {
+    let end = start;
+    while (end < 8 && groups[end] === 0) end++;
+    if (end - start > best.length) best = { start, length: end - start };
+    start = end === start ? start + 1 : end;
+  }
+  const hex = groups.map((group) => group.toString(16));
+  if (best.start < 0) return hex.join(':');
+  return `${hex.slice(0, best.start).join(':')}::${hex.slice(best.start + best.length).join(':')}`;
+}
+
+// Validation runs on every keystroke for every config; keep parsed networks, bounded.
+const parsed = new Map<string, Cidr>();
+const MAX_CACHED = 10_000;
+
 /** Parse a network in CIDR form; host bits must be zero, so the text means one network. */
 export function parseCidr(value: string): Cidr {
+  const cached = parsed.get(value);
+  if (cached) return cached;
   const fail = (): never => {
     throw new Error(`Rota inválida: "${value}". Use uma rede IPv4/IPv6 em CIDR, como 192.168.0.10/32.`);
   };
@@ -50,12 +75,24 @@ export function parseCidr(value: string): Cidr {
   if (!match) fail();
   const [, address, prefixText] = match!;
   const version = address.includes(':') ? 6 : 4;
-  const parsed = version === 4 ? parseIpv4(address) : parseIpv6(address);
+  const bits = version === 4 ? parseIpv4(address) : parseIpv6(address);
   const prefix = Number(prefixText);
-  if (parsed === null || prefix > BITS[version]) fail();
-  const hostBits = BigInt(BITS[version] - prefix);
-  if (parsed! & ((1n << hostBits) - 1n)) fail();
-  return { text: value, version, network: parsed!, prefix };
+  if (bits === null || prefix > BITS[version]) fail();
+  const hostMask = (1n << BigInt(BITS[version] - prefix)) - 1n;
+  if (bits! & hostMask) {
+    const network = formatAddress(version, bits! & ~hostMask);
+    throw new Error(`Rota ${value} tem bits de host; use ${network}/${prefix}.`);
+  }
+  const cidr: Cidr = { text: value, version, network: bits!, prefix };
+  if (parsed.size >= MAX_CACHED) parsed.clear();
+  parsed.set(value, cidr);
+  return cidr;
+}
+
+/** First and last address covered by the network, comparable within one IP version. */
+export function cidrRange(cidr: Cidr): [bigint, bigint] {
+  const size = 1n << BigInt(BITS[cidr.version] - cidr.prefix);
+  return [cidr.network, cidr.network + size - 1n];
 }
 
 export function cidrsOverlap(a: Cidr, b: Cidr): boolean {
@@ -79,7 +116,8 @@ export function validateExtraAllowedIps(value: unknown, subnet: string): asserts
   if (value.length > MAX_EXTRA_ALLOWED_IPS) {
     throw new Error(`Rotas extras: no máximo ${MAX_EXTRA_ALLOWED_IPS} redes por nó.`);
   }
-  const reserved = wireGuardSubnets(subnet);
+  // A subnet still being typed is reported by the network settings, not here.
+  const reserved = isValidSubnet(subnet) ? wireGuardSubnets(subnet) : [];
   const seen: Cidr[] = [];
   for (const entry of value) {
     if (typeof entry !== 'string') throw new Error('Rotas extras: entrada inválida.');

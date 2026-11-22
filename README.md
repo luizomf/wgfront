@@ -140,7 +140,7 @@ search domains, or DoH URLs. The tool validates syntax locally, not reachability
 It does not install a DNS server or add routes to reach your chosen resolvers;
 check their reachability and the routes they will use, especially in split tunnel.
 
-Structure exports use version 4 and retain these choices without keys.
+Structure exports use version 5 and retain these choices without keys.
 Version 1 files still import with the exact original DNS defaults and behavior;
 version 2 files preserve their DNS choices.
 
@@ -198,7 +198,7 @@ PSKs prevent the connection from working. Coordinate that rollout yourself.
 Secrets exist only in browser memory and explicitly generated configs/ZIPs or
 copies. No storage, logging, upload, external key service, or random fallback is
 used. Preview, individual downloads, clipboard copies, and ZIPs use the same
-pair secrets. Structure v4 stores only `network.usePsk`; v1/v2/v3 imports default
+pair secrets. Structures v4/v5 store only `network.usePsk`; v1/v2/v3 imports default
 to PSK off and retain their historical DNS and MTU migrations.
 
 ## Hybrid Example

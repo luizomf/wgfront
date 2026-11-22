@@ -404,3 +404,24 @@ describe('generateKeySummary', () => {
     expect(summary).toContain('wg ip  : 10.100.0.1/24, fd10:100::1/64');
   });
 });
+
+describe('extra AllowedIPs in generated configs', () => {
+  it('writes the extras on the AllowedIPs line of the target peer block only', () => {
+    const hub = makePeer({ id: '8', name: 'hub', wgOctet: 8 });
+    const nas = makePeer({ id: '105', name: 'nas', wgOctet: 105, role: 'spoke', extraAllowedIPs: ['192.168.0.105/32'] });
+    const config = generateConfig(hub, [hub, nas], { ...network, topology: 'hybrid' });
+    expect(config).toContain('AllowedIPs = 10.100.0.105/32, 192.168.0.105/32, fd10:100::105/128');
+    expect(generateConfig(nas, [hub, nas], { ...network, topology: 'hybrid' })).not.toContain('192.168.0.105/32');
+  });
+
+  it('regenerates a large network with extras quickly', () => {
+    const hubs = [1, 2, 3].map((octet) => makePeer({ id: `h${octet}`, name: `hub${octet}`, wgOctet: octet }));
+    const spokes = Array.from({ length: 251 }, (_, i) => makePeer({
+      id: `s${i}`, name: `spoke${i}`, wgOctet: i + 4, role: 'spoke',
+      extraAllowedIPs: [`192.168.${Math.floor(i / 200)}.${i % 200}/32`, `2001:db8:${i.toString(16)}::/48`],
+    }));
+    const started = performance.now();
+    generateAllConfigs([...hubs, ...spokes], { ...network, topology: 'hybrid' });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});

@@ -134,10 +134,9 @@ Version 4 has the same fields as v5 except each node's `extraAllowedIPs`, which
 must be absent. Import supplies an empty list for every node, so routes are
 unchanged.
 
-
 All v1/v2/v3 imports require `network.usePsk` to be absent and supply `false`.
 Version 3 otherwise has the same fields as v4: DNS and MTU choices are preserved.
-Only new v4 files require the explicit boolean; it is never coerced or inferred.
+Only v4/v5 files require the explicit boolean; it is never coerced or inferred.
 
 Version 2 has the same fields except each node's `mtu`, which must be absent.
 Import supplies `mtu: null` for every node and preserves all DNS choices and other

@@ -152,4 +152,26 @@ describe('extra AllowedIPs', () => {
     const backup = peer('9', { extraAllowedIPs: ['192.168.0.0/24'] });
     expect(validateRouting([exit, backup, client], network)).toEqual([]);
   });
+
+  it('rejects overlapping extras in mesh, hub-spoke, and IPv6', () => {
+    const a = peer('1', { extraAllowedIPs: ['2001:db8::/32'] });
+    const b = peer('2', { extraAllowedIPs: ['2001:db8:5::/48'] });
+    const c = peer('3', { role: 'spoke', gatewayId: '1' });
+    expect(validateRouting([a, b, c], { ...network, topology: 'mesh', gatewayId: '' })[0].message).toMatch(/sobrep/);
+    expect(validateRouting([a, b, c], { ...network, topology: 'hub-spoke', gatewayId: '1' })[0].message).toMatch(/sobrep/);
+  });
+
+  it('still reports overlaps between valid nodes when another node has a typo', () => {
+    const typo = peer('7', { role: 'spoke', extraAllowedIPs: ['nope'] });
+    const other = peer('106', { role: 'spoke', fullTunnel: true, extraAllowedIPs: ['192.168.0.0/24'] });
+    const messages = validateRouting([hub, nas, other, typo], network).map((issue) => issue.message);
+    expect(messages.some((message) => message.includes('sobrep'))).toBe(true);
+    expect(messages.some((message) => message.includes('nope'))).toBe(true);
+  });
+
+  it('does not blame extras for a subnet that is still being typed', () => {
+    for (const subnet of ['10.100', '']) {
+      expect(validateRouting([hub, client], { ...network, subnet })).toEqual([]);
+    }
+  });
 });

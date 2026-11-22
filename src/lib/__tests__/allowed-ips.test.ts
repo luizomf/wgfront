@@ -93,6 +93,15 @@ describe('extra AllowedIPs validation', () => {
     expect(() => validateExtraAllowedIps(value, subnet)).toThrow(message);
   });
 
+  it('names the network to use when host bits are set', () => {
+    expect(() => parseCidr('192.168.0.5/24')).toThrow('192.168.0.0/24');
+    expect(() => parseCidr('2001:db8::1/64')).toThrow('2001:db8::/64');
+  });
+
+  it('skips the WireGuard subnet check while the subnet is invalid', () => {
+    expect(() => validateExtraAllowedIps(['10.100.0.5/32'], '10.100')).not.toThrow();
+  });
+
   it('caps the list size', () => {
     const many = Array.from({ length: 65 }, (_, i) => `172.16.${i}.0/24`);
     expect(() => validateExtraAllowedIps(many, subnet)).toThrow(/64/);
